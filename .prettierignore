@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+next-env.d.ts
+pnpm-lock.yaml
+# Generated shadcn components keep their upstream formatting.
+src/components/ui/
+# Generated migration metadata.
+drizzle/meta/
