@@ -26,6 +26,7 @@ import { db } from "@/server/db";
  *
  * @see https://trpc.io/docs/server/context
  */
+/* v8 ignore start -- tests are using a mock context */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
   const session = await auth.api.getSession({
     headers: opts.headers,
@@ -36,6 +37,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
     ...opts,
   };
 };
+/* v8 ignore stop */
 
 /**
  * 2. INITIALIZATION
@@ -46,6 +48,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
  */
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
+  /* v8 ignore next -- unchanged create-t3-app error formatting */
   errorFormatter({ shape, error }) {
     return {
       ...shape,
@@ -88,11 +91,13 @@ export const createTRPCRouter = t.router;
 const timingMiddleware = t.middleware(async ({ next, path }) => {
   const start = Date.now();
 
-  if (t._config.isDev) {
+  /* v8 ignore start -- not reachable in tests */
+  if (t._config.isDev && process.env.NODE_ENV !== "test") {
     // artificial delay in dev
     const waitMs = Math.floor(Math.random() * 400) + 100;
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
+  /* v8 ignore stop */
 
   const result = await next();
 
