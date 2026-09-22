@@ -7,7 +7,7 @@
     "build": "next build",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test",
     "db:drop": "node --env-file=.env scripts/drop-db.js",
-    "db:generate": "drizzle-kit generate",
+    "db:generate": "node scripts/generate-migration.js",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
