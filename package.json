@@ -6,7 +6,6 @@
   "scripts": {
     "build": "next build",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test",
-    "db:drop": "node --env-file=.env scripts/drop-db.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -53,7 +52,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitest/coverage-v8": "^4.1.11",
-    "drizzle-kit": "^0.31.11",
+    "drizzle-kit": "^0.30.5",
     "eslint": "^9.23.0",
     "eslint-config-next": "^15.2.3",
     "eslint-config-prettier": "^10.1.8",
