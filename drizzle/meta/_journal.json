@@ -6,7 +6,14 @@
       "idx": 0,
       "version": "7",
       "when": 1788812608289,
-      "tag": "0000_tranquil_unicorn",
+      "tag": "0000_initial_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790096646481,
+      "tag": "0001_create_projects_and_project_members_table",
       "breakpoints": true
     }
   ]
