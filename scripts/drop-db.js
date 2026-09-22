@@ -14,6 +14,7 @@ if (!databaseUrl) {
 const sql = postgres(databaseUrl, { max: 1 });
 
 try {
+  await sql.unsafe("DROP SCHEMA IF EXISTS drizzle CASCADE");
   await sql.unsafe("DROP SCHEMA IF EXISTS public CASCADE");
   await sql.unsafe("CREATE SCHEMA public");
 } finally {
