@@ -109,8 +109,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.pg-drizzle_post": {
-      "name": "pg-drizzle_post",
+    "public.post": {
+      "name": "post",
       "schema": "",
       "columns": {
         "id": {
@@ -120,7 +120,7 @@
           "notNull": true,
           "identity": {
             "type": "byDefault",
-            "name": "pg-drizzle_post_id_seq",
+            "name": "post_id_seq",
             "schema": "public",
             "increment": "1",
             "startWith": "1",
@@ -188,9 +188,9 @@
         }
       },
       "foreignKeys": {
-        "pg-drizzle_post_createdById_user_id_fk": {
-          "name": "pg-drizzle_post_createdById_user_id_fk",
-          "tableFrom": "pg-drizzle_post",
+        "post_createdById_user_id_fk": {
+          "name": "post_createdById_user_id_fk",
+          "tableFrom": "post",
           "tableTo": "user",
           "columnsFrom": [
             "createdById"
