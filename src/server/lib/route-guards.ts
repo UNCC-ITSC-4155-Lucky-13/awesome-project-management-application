@@ -3,10 +3,10 @@
  * Middleware uses these to determine if a route is protected and requires authentication.
  */
 export const PROTECTED_PREFIXES = [
-    "/dashboard",
-    "/projects",
-    "/boards",
-    "/settings",
+  "/dashboard",
+  "/projects",
+  "/boards",
+  "/settings",
 ] as const;
 
 /**
@@ -18,18 +18,18 @@ export const PUBLIC_ROUTES = ["/", "/login"] as const;
  * Returns true if the given pathname is a protected route, false otherwise.
  */
 export function isProtectedRoute(pathname: string): boolean {
-    return PROTECTED_PREFIXES.some(
-        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-    );
+  return PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 }
 
 /**
  * Returns true if the given pathname is a public route, false otherwise.
  */
 export function isPublicRoute(pathname: string): boolean {
-    return PUBLIC_ROUTES.some(
-        (route) => pathname === route || pathname.startsWith(`${route}/`)
-    );
+  return PUBLIC_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
 }
 
 /**
@@ -37,11 +37,11 @@ export function isPublicRoute(pathname: string): boolean {
  * (including query parameters) in the callbackUrl query parameter.
  */
 export function buildLoginRedirect(
-    origin: string,
-    pathname: string,
-    search: string,
+  origin: string,
+  pathname: string,
+  search: string,
 ): URL {
-    const loginUrl = new URL("/login", origin);
-    loginUrl.searchParams.set("callbackUrl", `${pathname}${search}`);
-    return loginUrl;
+  const loginUrl = new URL("/login", origin);
+  loginUrl.searchParams.set("callbackUrl", `${pathname}${search}`);
+  return loginUrl;
 }
