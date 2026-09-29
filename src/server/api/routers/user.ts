@@ -2,13 +2,12 @@ import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
-import {
-  createTRPCRouter,
-  protectedProcedure,
-} from "@/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { userPreferences } from "@/server/db/schema";
 
-const preferencesOutput = (preferences: typeof userPreferences.$inferSelect) => ({
+const preferencesOutput = (
+  preferences: typeof userPreferences.$inferSelect,
+) => ({
   theme: preferences.theme,
 });
 
@@ -27,6 +26,7 @@ export const userRouter = createTRPCRouter({
       .values({ userId: ctx.session.user.id })
       .returning();
 
+    /* v8 ignore next -- Drizzle returns the inserted row */
     if (!createdPreferences) {
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     }
@@ -60,6 +60,7 @@ export const userRouter = createTRPCRouter({
         })
         .returning();
 
+      /* v8 ignore next -- Drizzle returns the upserted row */
       if (!updatedPreferences) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       }
