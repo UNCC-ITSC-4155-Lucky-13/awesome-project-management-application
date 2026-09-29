@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { userPreferences } from "@/server/db/schema";
+import { userPreferences, userTheme } from "@/server/db/schema";
 
 const preferencesOutput = (
   preferences: typeof userPreferences.$inferSelect,
@@ -32,7 +32,7 @@ export const userRouter = createTRPCRouter({
     .input(
       z
         .object({
-          theme: z.enum(["light", "dark", "system"]).optional(),
+          theme: z.enum(userTheme.enumValues).optional(),
         })
         .refine((preferences) => preferences.theme !== undefined, {
           message: "At least one preference must be supplied",
