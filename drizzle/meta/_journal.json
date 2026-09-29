@@ -15,6 +15,13 @@
       "when": 1790096646481,
       "tag": "0001_create_projects_and_project_members_table",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790644532477,
+      "tag": "0002_user_preferences",
+      "breakpoints": true
     }
   ]
 }
