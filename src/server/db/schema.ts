@@ -132,6 +132,18 @@ export const verification = pgTable("verification", {
   ),
 });
 
+/** Personal settings for an authenticated user. */
+export const userTheme = pgEnum("user_theme", ["light", "dark", "system"]);
+
+export const userPreferences = pgTable("user_preferences", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  theme: userTheme().default("system").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 /**
  * Postgres enum for `project_role`.
  *
@@ -190,11 +202,25 @@ export const projectMembers = pgTable(
  * `db.query.user.findFirst({ with: { account: true } })` returns a user with
  * their account data.
  */
-export const userRelations = relations(user, ({ many }) => ({
+export const userRelations = relations(user, ({ many, one }) => ({
   account: many(account),
   session: many(session),
   projectMembers: many(projectMembers),
+  preferences: one(userPreferences, {
+    fields: [user.id],
+    references: [userPreferences.userId],
+  }),
 }));
+
+export const userPreferencesRelations = relations(
+  userPreferences,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [userPreferences.userId],
+      references: [user.id],
+    }),
+  }),
+);
 
 /** Relations for the projects table. */
 export const projectsRelations = relations(projects, ({ many }) => ({
