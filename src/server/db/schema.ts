@@ -18,7 +18,7 @@
  * `.default(false)` is a SQL `DEFAULT`. Raw SQL updates will not bump
  * `$onUpdate` columns.
  */
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -27,6 +27,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -196,6 +197,38 @@ export const projectMembers = pgTable(
 );
 
 /**
+ * Pending invitations to join a project.
+ */
+export const projectInvites = pgTable(
+  "project_invites",
+  (d) => ({
+    id: d.uuid().primaryKey().defaultRandom(),
+    githubUsername: d.varchar({ length: 255 }).notNull(),
+    projectId: d
+      .uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    createdBy: d
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: d.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    expiresAt: d
+      .timestamp({ withTimezone: true })
+      .default(sql`now() + interval '7 days'`)
+      .notNull(),
+  }),
+  (t) => [
+    unique("project_invites_github_username_project_id_unique").on(
+      t.githubUsername,
+      t.projectId,
+    ),
+    index("project_invites_github_username_idx").on(t.githubUsername),
+    index("project_invites_project_id_idx").on(t.projectId),
+  ],
+);
+
+/**
  * Relations for the user table.
  *
  * Defining relations here allows us to use them in the database queries. Example:
@@ -225,6 +258,7 @@ export const userPreferencesRelations = relations(
 /** Relations for the projects table. */
 export const projectsRelations = relations(projects, ({ many }) => ({
   members: many(projectMembers), //
+  invites: many(projectInvites),
 }));
 
 /**
@@ -237,6 +271,18 @@ export const projectMembersRelations = relations(projectMembers, ({ one }) => ({
   }),
   user: one(user, {
     fields: [projectMembers.userId],
+    references: [user.id],
+  }),
+}));
+
+/** Relations for project invitations. */
+export const projectInvitesRelations = relations(projectInvites, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectInvites.projectId],
+    references: [projects.id],
+  }),
+  creator: one(user, {
+    fields: [projectInvites.createdBy],
     references: [user.id],
   }),
 }));
