@@ -97,7 +97,7 @@ describe("inviteRouter", () => {
     await createProject();
     const invite = await createTestCaller().invite.send({
       projectId,
-      githubUsername: "octocat",
+      githubUsername: " OcToCaT ",
     });
     expect(invite).toMatchObject({
       projectId,
@@ -165,7 +165,7 @@ describe("inviteRouter", () => {
   it("resolves the username from the linked GitHub profile", async () => {
     await createProject();
     await createUser("account-user", "Account User");
-    await linkGithubAccount("account-user", "linked-octocat");
+    await linkGithubAccount("account-user", "LiNkEd-OcToCaT");
     await db.insert(projectInvites).values({
       projectId,
       githubUsername: "linked-octocat",

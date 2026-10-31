@@ -79,7 +79,7 @@ const getGithubUsername = async (
     });
   }
 
-  return githubUser.login;
+  return githubUser.login.toLowerCase();
 };
 
 export const inviteRouter = createTRPCRouter({
@@ -87,7 +87,7 @@ export const inviteRouter = createTRPCRouter({
     .input(
       z.object({
         projectId: z.string().uuid(),
-        githubUsername: z.string().trim().min(1).max(255),
+        githubUsername: z.string().trim().toLowerCase().min(1).max(255),
       }),
     )
     .mutation(async ({ ctx, input }) => {
