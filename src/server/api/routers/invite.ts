@@ -37,17 +37,6 @@ const getGithubUsername = async (
   db: Database,
   sessionUser: Session["user"],
 ) => {
-  const userWithGithubUsername = sessionUser as typeof sessionUser & {
-    githubUsername?: string;
-    username?: string;
-  };
-  if (userWithGithubUsername.githubUsername) {
-    return userWithGithubUsername.githubUsername;
-  }
-  if (userWithGithubUsername.username) {
-    return userWithGithubUsername.username;
-  }
-
   const githubAccount = await db.query.account.findFirst({
     where: and(
       eq(account.userId, sessionUser.id),
@@ -55,7 +44,42 @@ const getGithubUsername = async (
     ),
   });
 
-  return githubAccount?.accountId ?? sessionUser.name;
+  if (!githubAccount?.accessToken) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "A linked GitHub account is required for invitations.",
+    });
+  }
+
+  const response = await fetch("https://api.github.com/user", {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${githubAccount.accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Unable to retrieve the GitHub username.",
+    });
+  }
+
+  const githubUser: unknown = await response.json();
+
+  if (
+    typeof githubUser !== "object" ||
+    githubUser === null ||
+    !("login" in githubUser) ||
+    typeof githubUser.login !== "string"
+  ) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "GitHub returned an invalid user profile.",
+    });
+  }
+
+  return githubUser.login;
 };
 
 export const inviteRouter = createTRPCRouter({

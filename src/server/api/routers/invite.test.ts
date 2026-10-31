@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   account,
@@ -37,11 +37,7 @@ async function createUser(id: string, name: string) {
   });
 }
 
-function callerFor(
-  id: string,
-  name: string,
-  extras: Record<string, string> = {},
-) {
+function callerFor(id: string, name: string) {
   return createTestCaller({
     ...testSession,
     user: {
@@ -49,12 +45,33 @@ function callerFor(
       id,
       name,
       email: `${id}@example.com`,
-      ...extras,
     },
   });
 }
 
+async function linkGithubAccount(userId: string, login: string) {
+  await db.insert(account).values({
+    id: `${userId}-account-id`,
+    accountId: "583231",
+    providerId: "github",
+    userId,
+    accessToken: `${userId}-github-token`,
+    createdAt: now,
+    updatedAt: now,
+  });
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ login }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+}
+
 describe("inviteRouter", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("requires authentication for every procedure", async () => {
     const caller = createTestCaller(null).invite;
 
@@ -117,6 +134,8 @@ describe("inviteRouter", () => {
   it("lists active invites for the user's GitHub username", async () => {
     await createProject(projectId, "Active Project");
     await createProject(secondProjectId, "Expired Project");
+    await createUser("invitee", "Not the username");
+    await linkGithubAccount("invitee", "octocat");
     await db.insert(projectInvites).values([
       {
         projectId,
@@ -133,9 +152,7 @@ describe("inviteRouter", () => {
     ]);
 
     await expect(
-      callerFor("invitee", "Not the username", {
-        githubUsername: "octocat",
-      }).invite.listSelf(),
+      callerFor("invitee", "Not the username").invite.listSelf(),
     ).resolves.toMatchObject([
       {
         projectId,
@@ -145,42 +162,29 @@ describe("inviteRouter", () => {
     ]);
   });
 
-  it("resolves the username from a linked GitHub account or session name", async () => {
+  it("resolves the username from the linked GitHub profile", async () => {
     await createProject();
     await createUser("account-user", "Account User");
-    await db.insert(account).values({
-      id: "github-account",
-      accountId: "linked-octocat",
-      providerId: "github",
-      userId: "account-user",
-      createdAt: now,
-      updatedAt: now,
-    });
+    await linkGithubAccount("account-user", "linked-octocat");
     await db.insert(projectInvites).values({
       projectId,
       githubUsername: "linked-octocat",
       createdBy: testSession.user.id,
       expiresAt: new Date(Date.now() + 60_000),
     });
-
     await expect(
       callerFor("account-user", "Account User").invite.listSelf(),
     ).resolves.toHaveLength(1);
 
-    await db.insert(projectInvites).values({
-      projectId,
-      githubUsername: "Named User",
-      createdBy: testSession.user.id,
-      expiresAt: new Date(Date.now() + 60_000),
-    });
     await expect(
       callerFor("named-user", "Named User").invite.listSelf(),
-    ).resolves.toHaveLength(1);
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
   it("accepts an active invite and adds the user to the project", async () => {
     await createProject();
     await createUser("invitee", "Invitee");
+    await linkGithubAccount("invitee", "accept-me");
     await db.insert(projectInvites).values({
       projectId,
       githubUsername: "accept-me",
@@ -189,12 +193,10 @@ describe("inviteRouter", () => {
     });
 
     await expect(
-      callerFor("invitee", "Invitee", { username: "accept-me" }).invite.respond(
-        {
-          projectId,
-          action: "accept",
-        },
-      ),
+      callerFor("invitee", "Invitee").invite.respond({
+        projectId,
+        action: "accept",
+      }),
     ).resolves.toEqual({ success: true });
     expect(
       await db.query.projectMembers.findFirst({
@@ -207,6 +209,7 @@ describe("inviteRouter", () => {
   it("denies an active invite without adding membership", async () => {
     await createProject();
     await createUser("invitee", "deny-me");
+    await linkGithubAccount("invitee", "deny-me");
     await db.insert(projectInvites).values({
       projectId,
       githubUsername: "deny-me",
@@ -228,6 +231,8 @@ describe("inviteRouter", () => {
 
   it("filters expired invites and rejects expired responses", async () => {
     await createProject();
+    await createUser("expired-user", "Expired User");
+    await linkGithubAccount("expired-user", "expired-user");
     await db.insert(projectInvites).values({
       projectId,
       githubUsername: "expired-user",
@@ -236,10 +241,10 @@ describe("inviteRouter", () => {
     });
 
     await expect(
-      callerFor("expired-user", "expired-user").invite.listSelf(),
+      callerFor("expired-user", "Expired User").invite.listSelf(),
     ).resolves.toEqual([]);
     await expect(
-      callerFor("expired-user", "expired-user").invite.respond({
+      callerFor("expired-user", "Expired User").invite.respond({
         projectId,
         action: "accept",
       }),
@@ -247,8 +252,10 @@ describe("inviteRouter", () => {
   });
 
   it("returns NOT_FOUND when no invite matches the user and project", async () => {
+    await createUser("missing", "Missing User");
+    await linkGithubAccount("missing", "missing");
     await expect(
-      callerFor("missing", "missing").invite.respond({
+      callerFor("missing", "Missing User").invite.respond({
         projectId,
         action: "deny",
       }),
