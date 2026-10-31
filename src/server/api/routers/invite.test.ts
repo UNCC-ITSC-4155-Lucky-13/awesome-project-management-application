@@ -181,6 +181,38 @@ describe("inviteRouter", () => {
     ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
+  it("rejects invite checks when GitHub cannot retrieve the profile", async () => {
+    await createUser("github-error-user", "GitHub Error User");
+    await linkGithubAccount("github-error-user", "github-error-user");
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(null, {
+        status: 401,
+      }),
+    );
+
+    await expect(
+      callerFor("github-error-user", "GitHub Error User").invite.listSelf(),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("rejects invite checks when GitHub returns an invalid profile", async () => {
+    await createUser("invalid-profile-user", "Invalid Profile User");
+    await linkGithubAccount("invalid-profile-user", "invalid-profile-user");
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ id: 583231 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(
+      callerFor(
+        "invalid-profile-user",
+        "Invalid Profile User",
+      ).invite.listSelf(),
+    ).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+  });
+
   it("accepts an active invite and adds the user to the project", async () => {
     await createProject();
     await createUser("invitee", "Invitee");
