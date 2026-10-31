@@ -59,12 +59,12 @@ async function linkGithubAccount(userId: string, login: string) {
     createdAt: now,
     updatedAt: now,
   });
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(JSON.stringify({ login }), {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    return new Response(JSON.stringify({ login }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
-    }),
-  );
+    });
+  });
 }
 
 describe("inviteRouter", () => {
