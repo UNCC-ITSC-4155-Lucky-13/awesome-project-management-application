@@ -29,6 +29,13 @@
       "when": 1791809200869,
       "tag": "0003_project_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793569183786,
+      "tag": "0004_flat_spectrum",
+      "breakpoints": true
     }
   ]
 }
