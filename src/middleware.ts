@@ -1,27 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getSessionCookie } from "better-auth/cookies";
 
-import { buildLoginRedirect, isPublicRoute } from "@/server/lib/route-guards";
+import { auth } from "@/server/better-auth";
 
-export function middleware(request: NextRequest) {
-  const { pathname, origin, search } = request.nextUrl;
+export async function middleware(request: NextRequest) {
+  const session = await auth.api.getSession({ headers: request.headers });
 
-  // Public routes are accessible without authentication.
-  if (isPublicRoute(pathname)) {
-    return NextResponse.next();
-  }
-
-  // Cheap cookie check to see if the user is authenticated. If not, redirect to the login page.
-  const sessionCookie = getSessionCookie(request);
-
-  if (!sessionCookie) {
-    return NextResponse.redirect(buildLoginRedirect(origin, pathname, search));
+  if (!session?.user) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set(
+      "callbackUrl",
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    );
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  // Skip Next internals, API routes, and static files from the middleware.
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  runtime: "nodejs",
+  matcher: ["/project/:path*"],
 };
