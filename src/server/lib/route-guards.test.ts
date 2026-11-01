@@ -6,39 +6,38 @@ import {
   isPublicRoute,
 } from "./route-guards";
 
-describe("isProtectedRoute", () => {
-  it.each([
-    "/dashboard",
-    "/dashboard/settings",
-    "/projects",
-    "/projects/123",
-    "/boards",
-    "/boards/abc",
-    "/settings",
-    "/settings/profile",
-  ])("returns true for %s", (path) => {
-    expect(isProtectedRoute(path)).toBe(true);
-  });
-
-  it.each(["/", "/login", "/about", "/public-page", "/dashboardx"])(
-    "returns false for %s",
-    (path) => {
-      expect(isProtectedRoute(path)).toBe(false);
-    },
-  );
-});
-
 describe("isPublicRoute", () => {
   it.each(["/", "/login", "/login/foo"])("returns true for %s", (path) => {
     expect(isPublicRoute(path)).toBe(true);
   });
 
-  it.each(["/dashboard", "/projects", "/settings"])(
-    "returns false for %s",
-    (path) => {
-      expect(isPublicRoute(path)).toBe(false);
-    },
-  );
+  it.each([
+    "/projects",
+    "/projects/123",
+    "/projects/123/boards",
+    "/projects/123/boards/abc",
+    "/projects/123/settings",
+    "/dashboard",
+  ])("returns false for %s", (path) => {
+    expect(isPublicRoute(path)).toBe(false);
+  });
+});
+
+describe("isProtectedRoute", () => {
+  it.each([
+    "/projects",
+    "/projects/123",
+    "/projects/123/boards",
+    "/projects/123/settings",
+    "/dashboard",
+    "/settings/profile",
+  ])("returns true for %s", (path) => {
+    expect(isProtectedRoute(path)).toBe(true);
+  });
+
+  it.each(["/", "/login", "/login/foo"])("returns false for %s", (path) => {
+    expect(isProtectedRoute(path)).toBe(false);
+  });
 });
 
 describe("buildLoginRedirect", () => {
@@ -55,10 +54,12 @@ describe("buildLoginRedirect", () => {
   it("preserves query strings", () => {
     const url = buildLoginRedirect(
       "http://localhost:3000",
-      "/boards",
+      "/projects/123/boards",
       "?tab=active",
     );
-    expect(url.searchParams.get("callbackUrl")).toBe("/boards?tab=active");
+    expect(url.searchParams.get("callbackUrl")).toBe(
+      "/projects/123/boards?tab=active",
+    );
   });
 
   it("encodes special characters correctly", () => {

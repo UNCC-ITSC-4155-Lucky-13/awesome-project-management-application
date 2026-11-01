@@ -1,22 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
-import {
-  buildLoginRedirect,
-  isProtectedRoute,
-  isPublicRoute,
-} from "@/server/lib/route-guards";
+import { buildLoginRedirect, isPublicRoute } from "@/server/lib/route-guards";
 
 export function middleware(request: NextRequest) {
   const { pathname, origin, search } = request.nextUrl;
 
   // Public routes are accessible without authentication.
   if (isPublicRoute(pathname)) {
-    return NextResponse.next();
-  }
-
-  // Only Protected routes require authentication.
-  if (!isProtectedRoute(pathname)) {
     return NextResponse.next();
   }
 

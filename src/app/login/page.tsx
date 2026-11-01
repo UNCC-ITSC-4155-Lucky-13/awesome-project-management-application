@@ -3,13 +3,7 @@ import { redirect } from "next/navigation";
 
 import { Typography } from "@/app/_components/typography";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { auth } from "@/server/better-auth";
 import { getSession } from "@/server/better-auth/server";
 
@@ -37,9 +31,6 @@ export default async function LoginPage({
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Sign in to your account</CardTitle>
-          <CardDescription>
-            We use GitHub for authentication. No password needed.
-          </CardDescription>
         </CardHeader>
         <CardFooter className="flex-col gap-3">
           <form
