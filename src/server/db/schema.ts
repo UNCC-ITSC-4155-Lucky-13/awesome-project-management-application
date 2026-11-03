@@ -161,8 +161,8 @@ export const projects = pgTable("project", (d) => ({
   id: d.uuid().primaryKey().defaultRandom(),
   name: d.varchar({ length: 255 }).notNull(),
   description: d.text(),
-  sprintsEnabled: d.boolean().default(false).notNull(),
   sprintDuration: d.integer().default(2).notNull(),
+  // Null disables sprints; a date enables them and anchors the sprint schedule.
   sprintStartDate: d.timestamp({ withTimezone: true }),
   createdAt: d
     .timestamp({ withTimezone: true })
