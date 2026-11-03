@@ -25,6 +25,7 @@ import {
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { ProjectSwitcher } from "./project-switcher";
+import { NavUser } from "./nav-user";
 
 const groups = [
   {
@@ -124,7 +125,9 @@ export function AppSidebar() {
           ))}
         </nav>
       </SidebarContent>
-      <SidebarFooter className="min-h-16" />
+      <SidebarFooter className="min-h-16">
+        <NavUser />
+      </SidebarFooter>
     </Sidebar>
   );
 }
