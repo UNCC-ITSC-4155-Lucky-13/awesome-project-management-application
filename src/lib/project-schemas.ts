@@ -18,7 +18,10 @@ export const sprintSetupSchema = z.discriminatedUnion("enabled", [
     startDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a start date.")
-      .refine((value) => !Number.isNaN(Date.parse(value)), "Enter a valid date."),
+      .refine(
+        (value) => !Number.isNaN(Date.parse(value)),
+        "Enter a valid date.",
+      ),
     durationWeeks: z
       .number({ message: "Enter the duration in weeks." })
       .int("Duration must be a whole number of weeks.")

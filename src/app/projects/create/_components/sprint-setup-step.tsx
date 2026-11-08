@@ -45,7 +45,9 @@ export function SprintSetupStep({
           value={values.sprintStartDate}
           disabled={disabled}
           aria-invalid={!!errors.sprintStartDate}
-          onChange={(event) => onChange({ sprintStartDate: event.target.value })}
+          onChange={(event) =>
+            onChange({ sprintStartDate: event.target.value })
+          }
         />
         <FieldError>{errors.sprintStartDate}</FieldError>
       </Field>

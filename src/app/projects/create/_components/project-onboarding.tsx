@@ -63,7 +63,8 @@ export function ProjectOnboarding() {
   }
 
   function next() {
-    const found = step === 0 ? validateDetails(values) : validateSprints(values);
+    const found =
+      step === 0 ? validateDetails(values) : validateSprints(values);
     setErrors(found);
     if (Object.keys(found).length === 0) setStep(step + 1);
   }
