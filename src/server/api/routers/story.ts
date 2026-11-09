@@ -1,17 +1,19 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { projectMembers, stories, storyAssignees } from "@/server/db/schema";
+import { type db as _db } from "@/server/db";
 
-// Helper to verify the user is a member of the project
+type DB = typeof _db;
+
 const verifyProjectMembership = async (
-  db: any,
+  database: DB,
   projectId: string,
   userId: string,
-) => {
-  const member = await db.query.projectMembers.findFirst({
+): Promise<void> => {
+  const member = await database.query.projectMembers.findFirst({
     where: and(
       eq(projectMembers.projectId, projectId),
       eq(projectMembers.userId, userId),
@@ -49,7 +51,7 @@ export const storyRouter = createTRPCRouter({
         ctx.session.user.id,
       );
 
-      return await ctx.db.transaction(async (tx: any) => {
+      return await ctx.db.transaction(async (tx) => {
         const [newStory] = await tx
           .insert(stories)
           .values({
@@ -64,12 +66,10 @@ export const storyRouter = createTRPCRouter({
           })
           .returning();
 
-        if (!newStory) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
         if (input.assigneeIds && input.assigneeIds.length > 0) {
           await tx.insert(storyAssignees).values(
-            input.assigneeIds.map((userId: string) => ({
-              storyId: newStory.id,
+            input.assigneeIds.map((userId) => ({
+              storyId: newStory!.id,
               userId,
             })),
           );
@@ -109,28 +109,34 @@ export const storyRouter = createTRPCRouter({
 
       const { id, assigneeIds, ...updateData } = input;
 
-      return await ctx.db.transaction(async (tx: any) => {
-        // If the column changed, update lastMovedAt automatically
+      return await ctx.db.transaction(async (tx) => {
+        const finalUpdate: Partial<typeof stories.$inferInsert> = {
+          ...updateData,
+        };
+
         if (updateData.column && updateData.column !== story.column) {
-          Object.assign(updateData, { lastMovedAt: new Date() });
+          finalUpdate.lastMovedAt = new Date();
         }
 
-        // Update the story fields
-        const [updatedStory] = await tx
-          .update(stories)
-          .set(updateData)
-          .where(eq(stories.id, id))
-          .returning();
+        let updatedStory = story;
 
-        // Sync assignees if provided
+        // Only run the update query if there are actual fields to set
+        if (Object.keys(finalUpdate).length > 0) {
+          const [result] = await tx
+            .update(stories)
+            .set(finalUpdate)
+            .where(eq(stories.id, id))
+            .returning();
+
+          updatedStory = result!;
+        }
+
         if (assigneeIds) {
           await tx.delete(storyAssignees).where(eq(storyAssignees.storyId, id));
           if (assigneeIds.length > 0) {
             await tx
               .insert(storyAssignees)
-              .values(
-                assigneeIds.map((userId: string) => ({ storyId: id, userId })),
-              );
+              .values(assigneeIds.map((userId) => ({ storyId: id, userId })));
           }
         }
 
@@ -184,6 +190,16 @@ export const storyRouter = createTRPCRouter({
       }
       if (input.column) {
         whereClause = and(whereClause, eq(stories.column, input.column))!;
+      }
+
+      // Add assignee filter using a subquery
+      if (input.assigneeId) {
+        const assignedStoryIds = ctx.db
+          .select({ id: storyAssignees.storyId })
+          .from(storyAssignees)
+          .where(eq(storyAssignees.userId, input.assigneeId));
+
+        whereClause = and(whereClause, inArray(stories.id, assignedStoryIds))!;
       }
 
       return await ctx.db.query.stories.findMany({
