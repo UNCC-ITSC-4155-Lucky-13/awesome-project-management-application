@@ -147,9 +147,7 @@ describe("storyRouter", () => {
       });
 
       expect(updated!.column).toBe("todo");
-      expect(updated!.lastMovedAt.getTime()).toBeGreaterThan(
-        oldDate.getTime(),
-      );
+      expect(updated!.lastMovedAt.getTime()).toBeGreaterThan(oldDate.getTime());
     });
 
     it("does not update lastMovedAt when the column is unchanged", async () => {
