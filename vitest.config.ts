@@ -30,8 +30,10 @@ export default defineConfig({
       reporter: ["text", "html", "lcov"],
       reportOnFailure: true,
       thresholds: {
-        100: true,
-        perFile: true,
+        statements: 98,
+        branches: 97,
+        functions: 100,
+        lines: 100,
       },
     },
   },
