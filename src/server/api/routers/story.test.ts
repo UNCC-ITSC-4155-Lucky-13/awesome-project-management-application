@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  projectMembers,
-  projects,
-  stories,
-  storyAssignees,
-  user,
-} from "@/server/db/schema";
+import { projectMembers, projects, stories, user } from "@/server/db/schema";
 import {
   createTestCaller,
   db,
@@ -146,8 +140,8 @@ describe("storyRouter", () => {
         column: "todo",
       });
 
-      expect(updated!.column).toBe("todo");
-      expect(updated!.lastMovedAt.getTime()).toBeGreaterThan(oldDate.getTime());
+      expect(updated.column).toBe("todo");
+      expect(updated.lastMovedAt.getTime()).toBeGreaterThan(oldDate.getTime());
     });
 
     it("does not update lastMovedAt when the column is unchanged", async () => {
@@ -165,8 +159,8 @@ describe("storyRouter", () => {
         name: "Renamed",
       });
 
-      expect(updated!.name).toBe("Renamed");
-      expect(updated!.lastMovedAt.getTime()).toBe(oldDate.getTime());
+      expect(updated.name).toBe("Renamed");
+      expect(updated.lastMovedAt.getTime()).toBe(oldDate.getTime());
     });
 
     it("replaces assignees when assigneeIds is provided", async () => {
