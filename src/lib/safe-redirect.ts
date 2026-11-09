@@ -1,0 +1,15 @@
+// Only allow same-site relative paths as post-login destinations.
+export function safeCallbackPath(
+  callbackUrl: string | undefined,
+  fallback = "/",
+): string {
+  if (
+    !callbackUrl ||
+    !callbackUrl.startsWith("/") ||
+    callbackUrl.startsWith("//") ||
+    callbackUrl.startsWith("/\\")
+  ) {
+    return fallback;
+  }
+  return callbackUrl;
+}

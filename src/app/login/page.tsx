@@ -4,8 +4,10 @@ import { redirect } from "next/navigation";
 import { Typography } from "@/app/_components/typography";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { safeCallbackPath } from "@/lib/safe-redirect";
 import { auth } from "@/server/better-auth";
 import { getSession } from "@/server/better-auth/server";
+import { api } from "@/trpc/server";
 
 export default async function LoginPage({
   searchParams,
@@ -13,12 +15,14 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
   const { callbackUrl } = await searchParams;
-  const destination = callbackUrl ?? "/";
+  const destination = safeCallbackPath(callbackUrl, "/projects");
 
-  // If the user is already signed in, send them where they wanted to go.
+  // A signed-in user with no projects goes to onboarding before any other
+  // destination. GitHub sign-in returns here, so this covers that flow too.
   const session = await getSession();
   if (session) {
-    redirect(destination);
+    const projects = await api.project.list();
+    redirect(projects.length === 0 ? "/projects/create" : destination);
   }
 
   return (
@@ -39,7 +43,7 @@ export default async function LoginPage({
               const res = await auth.api.signInSocial({
                 body: {
                   provider: "github",
-                  callbackURL: destination,
+                  callbackURL: `/login?callbackUrl=${encodeURIComponent(destination)}`,
                 },
               });
               if (!res.url) {
