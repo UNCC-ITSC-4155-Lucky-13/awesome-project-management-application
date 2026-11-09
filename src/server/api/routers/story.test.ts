@@ -123,6 +123,20 @@ describe("storyRouter", () => {
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
     });
 
+    it("rejects an empty update", async () => {
+      const project = await setupProject();
+      const story = await createTestCaller().story.create({
+        projectId: project.id,
+        name: "Empty Update",
+      });
+
+      await expect(
+        createTestCaller().story.update({
+          id: story!.id,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+
     it("updates lastMovedAt when the column changes", async () => {
       const project = await setupProject();
       const story = await createTestCaller().story.create({
@@ -416,6 +430,58 @@ describe("storyRouter", () => {
 
       expect(list).toHaveLength(1);
       expect(list[0]?.name).toBe("Assigned");
+    });
+
+    it("sorts by storyPoints", async () => {
+      const project = await setupProject();
+      await createTestCaller().story.create({
+        projectId: project.id,
+        name: "Low",
+        storyPoints: 1,
+      });
+      await createTestCaller().story.create({
+        projectId: project.id,
+        name: "High",
+        storyPoints: 10,
+      });
+
+      const list = await createTestCaller().story.list({
+        projectId: project.id,
+        sort: "storyPoints",
+      });
+
+      expect(list[0]?.name).toBe("High");
+      expect(list[1]?.name).toBe("Low");
+    });
+  });
+
+  describe("getById", () => {
+    it("rejects unauthenticated callers", async () => {
+      await expect(
+        createTestCaller(null).story.getById({
+          id: "00000000-0000-0000-0000-000000000000",
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
+
+    it("throws NOT_FOUND if the story doesn't exist", async () => {
+      await expect(
+        createTestCaller().story.getById({
+          id: "00000000-0000-0000-0000-000000000000",
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("returns the story with assignees", async () => {
+      const project = await setupProject();
+      const story = await createTestCaller().story.create({
+        projectId: project.id,
+        name: "Get Me",
+      });
+
+      const fetched = await createTestCaller().story.getById({ id: story!.id });
+      expect(fetched.name).toBe("Get Me");
+      expect(fetched.assignees).toBeDefined();
     });
   });
 });

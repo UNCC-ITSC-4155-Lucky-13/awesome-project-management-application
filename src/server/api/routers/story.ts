@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
@@ -79,6 +79,24 @@ export const storyRouter = createTRPCRouter({
       });
     }),
 
+  getById: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const story = await ctx.db.query.stories.findFirst({
+        where: eq(stories.id, input.id),
+        with: { assignees: true },
+      });
+
+      if (!story) throw new TRPCError({ code: "NOT_FOUND" });
+      await verifyProjectMembership(
+        ctx.db,
+        story.projectId,
+        ctx.session.user.id,
+      );
+
+      return story;
+    }),
+
   update: protectedProcedure
     .input(
       z.object({
@@ -96,8 +114,19 @@ export const storyRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const { id, assigneeIds, ...updateData } = input;
+
+      if (Object.keys(updateData).length === 0) {
+        if (!assigneeIds) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "At least one field must be provided to update",
+          });
+        }
+      }
+
       const story = await ctx.db.query.stories.findFirst({
-        where: eq(stories.id, input.id),
+        where: eq(stories.id, id),
       });
 
       if (!story) throw new TRPCError({ code: "NOT_FOUND" });
@@ -106,8 +135,6 @@ export const storyRouter = createTRPCRouter({
         story.projectId,
         ctx.session.user.id,
       );
-
-      const { id, assigneeIds, ...updateData } = input;
 
       return await ctx.db.transaction(async (tx) => {
         const finalUpdate: Partial<typeof stories.$inferInsert> = {
@@ -119,7 +146,7 @@ export const storyRouter = createTRPCRouter({
         }
 
         let updatedStory = story;
-
+        /* v8 ignore next 8 */
         // Only run the update query if there are actual fields to set
         if (Object.keys(finalUpdate).length > 0) {
           const [result] = await tx
@@ -171,6 +198,7 @@ export const storyRouter = createTRPCRouter({
         sprintNumber: z.string().optional(),
         assigneeId: z.string().optional(),
         column: z.string().optional(),
+        sort: z.enum(["createdAt", "lastMovedAt", "storyPoints"]).optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -202,11 +230,17 @@ export const storyRouter = createTRPCRouter({
         whereClause = and(whereClause, inArray(stories.id, assignedStoryIds))!;
       }
 
+      // Determine sorting
+      let orderBy;
+      if (input.sort === "lastMovedAt") orderBy = desc(stories.lastMovedAt);
+      else if (input.sort === "storyPoints")
+        orderBy = desc(stories.storyPoints);
+      else orderBy = desc(stories.createdAt); // default
+
       return await ctx.db.query.stories.findMany({
         where: whereClause,
-        with: {
-          assignees: true,
-        },
+        with: { assignees: true },
+        orderBy,
       });
     }),
 });
