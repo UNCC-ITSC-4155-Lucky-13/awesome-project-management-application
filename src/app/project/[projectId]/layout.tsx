@@ -1,4 +1,5 @@
 import { Typography } from "@/app/_components/typography";
+import { NotificationMenu } from "@/app/_components/notification-menu";
 import {
   SidebarInset,
   SidebarProvider,
@@ -20,6 +21,9 @@ export default function ProjectLayout({
           <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
             <SidebarTrigger />
             <Typography variant="caption">BetterJira</Typography>
+            <div className="ml-auto">
+              <NotificationMenu />
+            </div>
           </header>
           <main className="flex-1 p-6 md:p-8">{children}</main>
         </SidebarInset>
