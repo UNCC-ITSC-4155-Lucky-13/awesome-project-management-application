@@ -16,8 +16,6 @@ beforeEach(() => {
 describe("protected route matcher", () => {
   it.each([
     "/project",
-    "/projects",
-    "/projects/create",
     "/project/demo",
     "/project/demo/sprints",
     "/project/demo/metrics",
@@ -25,6 +23,7 @@ describe("protected route matcher", () => {
     "/project/demo/settings/project",
     "/project/demo/settings/members",
     "/project/demo.foo/settings/members",
+    "/projects",
   ])("protects %s", (pathname) => {
     expect(
       unstable_doesMiddlewareMatch({
