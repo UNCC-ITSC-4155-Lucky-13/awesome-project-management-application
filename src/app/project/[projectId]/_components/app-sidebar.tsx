@@ -14,12 +14,19 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   BarChart3Icon,
   CalendarDaysIcon,
   LayoutDashboardIcon,
   PlusIcon,
   SettingsIcon,
   UserCogIcon,
+  UserCircleIcon,
   UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -124,7 +131,27 @@ export function AppSidebar() {
           ))}
         </nav>
       </SidebarContent>
-      <SidebarFooter className="min-h-16" />
+      <SidebarFooter className="min-h-16">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<SidebarMenuButton size="lg" />}>
+                <UserCircleIcon />
+                <span>Profile</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="end">
+                <DropdownMenuItem
+                  render={<Link href="/preferences" />}
+                  onClick={() => setOpenMobile(false)}
+                >
+                  <SettingsIcon />
+                  Preferences
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }
