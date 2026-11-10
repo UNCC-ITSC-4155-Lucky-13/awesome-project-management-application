@@ -19,5 +19,5 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   runtime: "nodejs",
-  matcher: ["/project/:path*", "/projects/:path*"],
+  matcher: ["/preferences", "/project/:path*", "/projects/:path*"],
 };
