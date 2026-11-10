@@ -16,6 +16,7 @@ beforeEach(() => {
 describe("protected route matcher", () => {
   it.each([
     "/project",
+    "/projects/create",
     "/project/demo",
     "/project/demo/sprints",
     "/project/demo/metrics",
