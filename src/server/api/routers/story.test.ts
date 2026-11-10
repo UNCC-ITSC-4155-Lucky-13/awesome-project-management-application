@@ -453,6 +453,36 @@ describe("storyRouter", () => {
       expect(list[0]?.name).toBe("High");
       expect(list[1]?.name).toBe("Low");
     });
+
+    it("sorts by lastMovedAt instead of creation order", async () => {
+      const project = await setupProject();
+      await db.insert(stories).values([
+        {
+          projectId: project.id,
+          creatorId: testSession.user.id,
+          name: "Moved recently",
+          createdAt: new Date("2026-01-01"),
+          lastMovedAt: new Date("2026-02-01"),
+        },
+        {
+          projectId: project.id,
+          creatorId: testSession.user.id,
+          name: "Created recently",
+          createdAt: new Date("2026-02-01"),
+          lastMovedAt: new Date("2026-01-01"),
+        },
+      ]);
+
+      const list = await createTestCaller().story.list({
+        projectId: project.id,
+        sort: "lastMovedAt",
+      });
+
+      expect(list.map((story) => story.name)).toEqual([
+        "Moved recently",
+        "Created recently",
+      ]);
+    });
   });
 
   describe("getById", () => {

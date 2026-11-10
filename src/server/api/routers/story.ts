@@ -146,7 +146,6 @@ export const storyRouter = createTRPCRouter({
         }
 
         let updatedStory = story;
-        /* v8 ignore next 8 */
         // Only run the update query if there are actual fields to set
         if (Object.keys(finalUpdate).length > 0) {
           const [result] = await tx
