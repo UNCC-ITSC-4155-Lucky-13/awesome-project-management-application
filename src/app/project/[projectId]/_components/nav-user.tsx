@@ -34,7 +34,7 @@ export async function signOutAndRedirect(redirect: () => void) {
   const result = await authClient.signOut();
 
   if (result?.error) {
-    throw result.error;
+    throw new Error("Unable to sign out.", { cause: result.error });
   }
 
   redirect();
