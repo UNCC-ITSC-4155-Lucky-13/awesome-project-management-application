@@ -31,7 +31,12 @@ export function getUserInitials(name: string | null | undefined) {
 }
 
 export async function signOutAndRedirect(redirect: () => void) {
-  await authClient.signOut();
+  const result = await authClient.signOut();
+
+  if (result?.error) {
+    throw result.error;
+  }
+
   redirect();
 }
 
@@ -96,25 +101,29 @@ export function NavUser() {
             <ChevronUpIcon className="ml-auto size-4 shrink-0" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start">
-            <DropdownMenuLabel>
-              <div className="flex items-center gap-2">
-                <Avatar size="sm">
-                  {user.image && (
-                    <AvatarImage
-                      src={user.image}
-                      alt={`${displayName}'s avatar`}
-                    />
-                  )}
-                  <AvatarFallback>{getUserInitials(user.name)}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{displayName}</p>
-                  <p className="text-muted-foreground truncate text-xs font-normal">
-                    {user.email}
-                  </p>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>
+                <div className="flex items-center gap-2">
+                  <Avatar size="sm">
+                    {user.image && (
+                      <AvatarImage
+                        src={user.image}
+                        alt={`${displayName}'s avatar`}
+                      />
+                    )}
+                    <AvatarFallback>
+                      {getUserInitials(user.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{displayName}</p>
+                    <p className="text-muted-foreground truncate text-xs font-normal">
+                      {user.email}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </DropdownMenuLabel>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem disabled>

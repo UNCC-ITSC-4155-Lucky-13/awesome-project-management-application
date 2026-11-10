@@ -24,4 +24,18 @@ describe("NavUser", () => {
     expect(signOut).toHaveBeenCalledOnce();
     expect(redirect).toHaveBeenCalledOnce();
   });
+
+  it("does not redirect when sign out returns an error", async () => {
+    signOut.mockResolvedValue({
+      data: null,
+      error: new Error("Unable to sign out"),
+    });
+    const redirect = vi.fn();
+
+    await expect(signOutAndRedirect(redirect)).rejects.toThrow(
+      "Unable to sign out",
+    );
+
+    expect(redirect).not.toHaveBeenCalled();
+  });
 });
