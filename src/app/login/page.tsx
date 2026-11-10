@@ -13,7 +13,7 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
   const { callbackUrl } = await searchParams;
-  const destination = callbackUrl ?? "/";
+  const destination = callbackUrl ?? "/projects";
 
   // If the user is already signed in, send them where they wanted to go.
   const session = await getSession();

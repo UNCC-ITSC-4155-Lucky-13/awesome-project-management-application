@@ -23,6 +23,7 @@ describe("protected route matcher", () => {
     "/project/demo/settings/project",
     "/project/demo/settings/members",
     "/project/demo.foo/settings/members",
+    "/projects",
   ])("protects %s", (pathname) => {
     expect(
       unstable_doesMiddlewareMatch({
