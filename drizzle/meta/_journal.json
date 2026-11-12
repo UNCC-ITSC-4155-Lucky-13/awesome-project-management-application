@@ -43,6 +43,13 @@
       "when": 1794270224144,
       "tag": "0005_flat_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794467923621,
+      "tag": "0006_add_comments_table",
+      "breakpoints": true
     }
   ]
 }
