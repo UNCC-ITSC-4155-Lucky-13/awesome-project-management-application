@@ -375,3 +375,35 @@ export const storyAssigneesRelations = relations(storyAssignees, ({ one }) => ({
   }),
   user: one(user, { fields: [storyAssignees.userId], references: [user.id] }),
 }));
+
+/**
+ * Comments on a story. Deleting a story or a user deletes their comments.
+ * `editedAt` stays null until the content is edited.
+ */
+export const comments = pgTable(
+  "comment",
+  (d) => ({
+    id: d.uuid().primaryKey().defaultRandom(),
+    storyId: d
+      .uuid()
+      .notNull()
+      .references(() => stories.id, { onDelete: "cascade" }),
+    createdBy: d
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    content: d.text().notNull(),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    editedAt: d.timestamp({ withTimezone: true }),
+  }),
+  (t) => [index("comment_story_idx").on(t.storyId)],
+);
+
+/** Relations for the comments table. */
+export const commentsRelations = relations(comments, ({ one }) => ({
+  story: one(stories, { fields: [comments.storyId], references: [stories.id] }),
+  author: one(user, { fields: [comments.createdBy], references: [user.id] }),
+}));
