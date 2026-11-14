@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum ListingStatus {
+  OPEN
+  SOLD
+}
+
+enum BidStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model ApiUser {
+  id         String      @id @default(uuid()) @db.Uuid
+  name       String
+  email      String      @unique
+  password   String
+  role       UserRole    @default(USER)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  listings   Listing[]
+  bids       Bid[]
+  watchlist  Watchlist[]
+
+  @@map("api_users")
+}
+
+model Category {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  listings  Listing[]
+
+  @@map("categories")
+}
+
+model Listing {
+  id            String        @id @default(uuid()) @db.Uuid
+  title         String
+  description   String
+  startingPrice Decimal       @db.Decimal(12, 2)
+  status        ListingStatus @default(OPEN)
+  sellerId      String        @db.Uuid
+  categoryId    String        @db.Uuid
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  seller        ApiUser       @relation(fields: [sellerId], references: [id])
+  category      Category      @relation(fields: [categoryId], references: [id])
+  bids          Bid[]
+  watchlist     Watchlist[]
+
+  @@index([sellerId])
+  @@index([categoryId])
+  @@index([status])
+  @@map("listings")
+}
+
+model Bid {
+  id        String    @id @default(uuid()) @db.Uuid
+  amount    Decimal   @db.Decimal(12, 2)
+  status    BidStatus @default(PENDING)
+  listingId String    @db.Uuid
+  bidderId  String    @db.Uuid
+  createdAt DateTime  @default(now())
+  listing   Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  bidder    ApiUser   @relation(fields: [bidderId], references: [id])
+
+  @@index([listingId, amount])
+  @@index([bidderId])
+  @@map("bids")
+}
+
+model Watchlist {
+  id        String   @id @default(uuid()) @db.Uuid
+  listingId String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user      ApiUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, userId])
+  @@index([userId])
+  @@map("watchlist")
+}

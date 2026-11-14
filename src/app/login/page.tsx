@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Typography } from "@/app/_components/typography";
+import { EmailAuthForm } from "@/app/login/_components/email-auth-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { safeCallbackPath } from "@/lib/safe-redirect";
@@ -37,6 +38,10 @@ export default async function LoginPage({
           <CardTitle>Sign in to your account</CardTitle>
         </CardHeader>
         <CardFooter className="flex-col gap-3">
+          <EmailAuthForm destination={destination} />
+
+          <div className="text-muted-foreground text-sm">or</div>
+
           <form
             action={async () => {
               "use server";
