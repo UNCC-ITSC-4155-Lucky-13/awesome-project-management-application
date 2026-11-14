@@ -133,6 +133,17 @@ export const verification = pgTable("verification", {
   ),
 });
 
+/** Signing keys used by Better Auth's JWT plugin. */
+export const jwks = pgTable("jwks", {
+  id: text("id").primaryKey(),
+  publicKey: text("public_key").notNull(),
+  privateKey: text("private_key").notNull(),
+  createdAt: timestamp("created_at").notNull(),
+  expiresAt: timestamp("expires_at"),
+  alg: text("alg"),
+  crv: text("crv"),
+});
+
 /** Personal settings for an authenticated user. */
 export const userTheme = pgEnum("user_theme", ["light", "dark", "system"]);
 
