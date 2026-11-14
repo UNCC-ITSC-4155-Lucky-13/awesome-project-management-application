@@ -1,7 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { jwt } from "better-auth/plugins";
 
 import { env } from "@/env";
 import { db } from "@/server/db";
@@ -20,7 +19,7 @@ export const auth = betterAuth({
       redirectURI: "http://localhost:3000/api/auth/callback/github",
     },
   },
-  plugins: [jwt(), nextCookies()],
+  plugins: [nextCookies()],
 });
 
 export type Session = typeof auth.$Infer.Session;
