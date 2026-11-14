@@ -23,52 +23,54 @@ export function ProjectSelection() {
   const router = useRouter();
   // Revalidate on entry so a stale empty cache never bounces a user who just
   // gained access to a project.
-  const projects = api.project.list.useQuery(undefined, {
-    refetchOnMount: "always",
-  });
+  const {
+    data: projects,
+    error,
+    isFetching,
+    refetch,
+  } = api.project.list.useQuery(undefined, { refetchOnMount: "always" });
 
   // Users without memberships belong in onboarding, not in an empty selector.
-  const noMemberships =
-    projects.isSuccess && !projects.isFetching && projects.data.length === 0;
+  const noMemberships = !error && !isFetching && projects?.length === 0;
   useEffect(() => {
     if (noMemberships) router.replace(PROJECT_CREATE_PATH);
   }, [noMemberships, router]);
 
-  const projectList = projects.data;
+  if (error) {
+    const expired = error.data?.code === "UNAUTHORIZED";
+    return (
+      <Card className="w-full max-w-xl" role="alert">
+        <CardHeader>
+          <CardTitle>
+            {expired
+              ? "Your session has expired"
+              : "Couldn't load your projects"}
+          </CardTitle>
+          <CardDescription>
+            {expired
+              ? "Sign in again to see your projects."
+              : "Something went wrong. Check your connection and try again."}
+          </CardDescription>
+        </CardHeader>
+        <CardFooter>
+          {expired ? (
+            <Button
+              nativeButton={false}
+              render={<Link href="/login?callbackUrl=%2Fprojects" />}
+            >
+              Sign in
+            </Button>
+          ) : (
+            <Button disabled={isFetching} onClick={() => void refetch()}>
+              Try again
+            </Button>
+          )}
+        </CardFooter>
+      </Card>
+    );
+  }
 
-  if (!projectList) {
-    if (projects.isError) {
-      const expired = projects.error.data?.code === "UNAUTHORIZED";
-      return (
-        <Card className="w-full max-w-xl" role="alert">
-          <CardHeader>
-            <CardTitle>
-              {expired
-                ? "Your session has expired"
-                : "Couldn't load your projects"}
-            </CardTitle>
-            <CardDescription>
-              {expired
-                ? "Sign in again to see your projects."
-                : "Something went wrong. Check your connection and try again."}
-            </CardDescription>
-          </CardHeader>
-          <CardFooter>
-            {expired ? (
-              <Button
-                nativeButton={false}
-                render={<Link href="/login?callbackUrl=%2Fprojects" />}
-              >
-                Sign in
-              </Button>
-            ) : (
-              <Button onClick={() => void projects.refetch()}>Try again</Button>
-            )}
-          </CardFooter>
-        </Card>
-      );
-    }
-
+  if (!projects) {
     return (
       <Card className="w-full max-w-xl" aria-busy="true">
         <CardHeader>
@@ -84,7 +86,7 @@ export function ProjectSelection() {
     );
   }
 
-  if (projectList.length === 0) {
+  if (projects.length === 0) {
     return (
       <Card className="w-full max-w-xl">
         <CardHeader>
@@ -108,7 +110,7 @@ export function ProjectSelection() {
       </CardHeader>
       <CardContent>
         <ul className="space-y-2">
-          {projectList.map((project) => (
+          {projects.map((project) => (
             <li key={project.id}>
               <Button
                 variant="outline"
