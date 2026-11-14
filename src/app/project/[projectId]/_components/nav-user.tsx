@@ -12,10 +12,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
+import { toast } from "@/components/ui/toast";
 import { authClient } from "@/server/better-auth/client";
 import { ChevronUpIcon, LogOutIcon, SettingsIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function getUserInitials(name: string | null | undefined) {
   const initials = name
@@ -46,6 +47,16 @@ export function NavUser() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
   const user = session?.user;
+
+  useEffect(() => {
+    if (signOutError) {
+      toast.add({
+        type: "error",
+        title: "Sign out failed",
+        description: "Please try again.",
+      });
+    }
+  }, [signOutError]);
 
   if (isPending) {
     return (
@@ -140,11 +151,6 @@ export function NavUser() {
               <LogOutIcon />
               {isSigningOut ? "Signing out..." : "Sign Out"}
             </DropdownMenuItem>
-            {signOutError && (
-              <p className="text-destructive px-1.5 py-1 text-xs">
-                Sign out failed. Please try again.
-              </p>
-            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
