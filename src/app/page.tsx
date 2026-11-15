@@ -50,7 +50,7 @@ export default function Home() {
         <Button
           variant="ghost"
           nativeButton={false}
-          render={<Link href="/login" />}
+          render={<Link href="/projects" />}
           className="text-muted-foreground hover:text-foreground"
         >
           Sign in
@@ -86,7 +86,7 @@ export default function Home() {
             <Button
               size="lg"
               nativeButton={false}
-              render={<Link href="/login" />}
+              render={<Link href="/projects" />}
               className="shadow-primary/20 gap-2 shadow-lg"
             >
               Get started free
@@ -227,7 +227,7 @@ export default function Home() {
         <Button
           size="lg"
           nativeButton={false}
-          render={<Link href="/login" />}
+          render={<Link href="/projects" />}
           className="mt-8 gap-2"
         >
           Create your workspace
