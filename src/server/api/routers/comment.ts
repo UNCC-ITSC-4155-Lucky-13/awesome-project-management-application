@@ -41,6 +41,21 @@ async function findMembership(
   });
 }
 
+// The caller must belong to the project.
+async function requireMember(
+  database: Database,
+  projectId: string,
+  userId: string,
+) {
+  const membership = await findMembership(database, projectId, userId);
+
+  if (!membership) {
+    throw new TRPCError({ code: "FORBIDDEN" });
+  }
+
+  return membership;
+}
+
 // Comments don't store a project, so we go story -> project to find out
 // whether the caller belongs to the project that owns the story.
 async function requireStoryMember(
@@ -56,11 +71,26 @@ async function requireStoryMember(
     throw new TRPCError({ code: "NOT_FOUND" });
   }
 
-  const membership = await findMembership(database, story.projectId, userId);
+  await requireMember(database, story.projectId, userId);
+}
 
-  if (!membership) {
-    throw new TRPCError({ code: "FORBIDDEN" });
+// One query gives us both a comment's author and the project its story
+// belongs to.
+async function findCommentTarget(database: Database, commentId: string) {
+  const [target] = await database
+    .select({
+      createdBy: comments.createdBy,
+      projectId: stories.projectId,
+    })
+    .from(comments)
+    .innerJoin(stories, eq(comments.storyId, stories.id))
+    .where(eq(comments.id, commentId));
+
+  if (!target) {
+    throw new TRPCError({ code: "NOT_FOUND" });
   }
+
+  return target;
 }
 
 export const commentRouter = createTRPCRouter({
@@ -88,18 +118,15 @@ export const commentRouter = createTRPCRouter({
   edit: protectedProcedure
     .input(z.object({ id: z.string().uuid(), content: commentContent }))
     .mutation(async ({ ctx, input }) => {
-      const comment = await ctx.db.query.comments.findFirst({
-        where: eq(comments.id, input.id),
-      });
-
-      if (!comment) {
-        throw new TRPCError({ code: "NOT_FOUND" });
-      }
+      const target = await findCommentTarget(ctx.db, input.id);
 
       // Only the author may edit, even project admins and owners.
-      if (comment.createdBy !== ctx.session.user.id) {
+      if (target.createdBy !== ctx.session.user.id) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+
+      // The author must also still belong to the project.
+      await requireMember(ctx.db, target.projectId, ctx.session.user.id);
 
       const [updated] = await ctx.db
         .update(comments)
@@ -113,31 +140,18 @@ export const commentRouter = createTRPCRouter({
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      // One query gives us both the author and the project the comment's
-      // story belongs to.
-      const [target] = await ctx.db
-        .select({
-          createdBy: comments.createdBy,
-          projectId: stories.projectId,
-        })
-        .from(comments)
-        .innerJoin(stories, eq(comments.storyId, stories.id))
-        .where(eq(comments.id, input.id));
-
-      if (!target) {
-        throw new TRPCError({ code: "NOT_FOUND" });
-      }
+      const target = await findCommentTarget(ctx.db, input.id);
 
       // The author may always delete their own comment. Anyone else must be
       // an admin or owner of the project.
       if (target.createdBy !== ctx.session.user.id) {
-        const membership = await findMembership(
+        const membership = await requireMember(
           ctx.db,
           target.projectId,
           ctx.session.user.id,
         );
 
-        if (!membership || membership.role === "member") {
+        if (membership.role === "member") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
       }

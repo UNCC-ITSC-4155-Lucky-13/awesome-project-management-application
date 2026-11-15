@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -289,6 +289,30 @@ describe("commentRouter", () => {
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect(
         callerFor("outsider", "Outsider").comment.edit({
+          id: comment.id,
+          content: "Changed",
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(await findComment(comment.id)).toMatchObject({
+        content: "Original",
+        editedAt: null,
+      });
+    });
+
+    it("rejects an author who has been removed from the project", async () => {
+      const comment = await addComment(storyId, "member-user", "Original");
+      await db
+        .delete(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, projectId),
+            eq(projectMembers.userId, "member-user"),
+          ),
+        );
+
+      await expect(
+        callerFor("member-user", "Member User").comment.edit({
           id: comment.id,
           content: "Changed",
         }),
