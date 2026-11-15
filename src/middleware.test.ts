@@ -16,6 +16,7 @@ beforeEach(() => {
 describe("protected route matcher", () => {
   it.each([
     "/project",
+    "/projects/create",
     "/project/demo",
     "/project/demo/sprints",
     "/project/demo/metrics",
@@ -41,7 +42,7 @@ describe("protected route matcher", () => {
     "/api/trpc/post.getLatest",
     "/_next/static/chunk.js",
     "/favicon.ico",
-    "/projects/demo",
+    "/projectsdfs",
     "/project-other",
     "/dashboard",
   ])("does not intercept %s", (pathname) => {

@@ -3,12 +3,12 @@ import { and, eq, getTableColumns } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
+import { projectName } from "@/lib/project-schemas";
 import { DEFAULT_PROJECT_SETTINGS } from "@/server/constants/projects";
 import type { db } from "@/server/db";
 import { projectMembers, projects } from "@/server/db/schema";
 
 const projectInput = z.object({ projectId: z.string().uuid() });
-const projectName = z.string().trim().min(1).max(255);
 const sprintSettings = z.object({
   sprintDuration: z.number().int().positive().optional(),
   sprintStartDate: z.date().nullable().optional(),

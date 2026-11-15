@@ -296,3 +296,82 @@ export const accountRelations = relations(account, ({ one }) => ({
 export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, { fields: [session.userId], references: [user.id] }),
 }));
+
+/**
+ * Stories (task/cards) within a project.
+ */
+export const stories = pgTable(
+  "story",
+  (d) => ({
+    id: d.uuid().primaryKey().defaultRandom(),
+    name: d.varchar({ length: 255 }).notNull(),
+    description: d.text(),
+    projectId: d
+      .uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    creatorId: d
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    column: d.varchar({ length: 50 }).notNull().default("backlog"),
+    sprintNumber: d.varchar({ length: 8 }),
+    storyPoints: d.integer().default(0),
+    lastMovedAt: d
+      .timestamp({ withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).$onUpdate(() => new Date()),
+  }),
+  (t) => [
+    index("story_project_idx").on(t.projectId),
+    index("story_creator_idx").on(t.creatorId),
+  ],
+);
+
+/**
+ * Junction table for story assignments. A story can have multiple assignees.
+ */
+export const storyAssignees = pgTable(
+  "story_assignees",
+  (d) => ({
+    storyId: d
+      .uuid()
+      .notNull()
+      .references(() => stories.id, { onDelete: "cascade" }),
+    userId: d
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  }),
+  (t) => [
+    primaryKey({
+      name: "story_assignee_pk",
+      columns: [t.storyId, t.userId],
+    }),
+    index("story_assignee_user_idx").on(t.userId),
+  ],
+);
+/**
+ * Relations for the stories table.
+ */
+export const storiesRelations = relations(stories, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [stories.projectId],
+    references: [projects.id],
+  }),
+  creator: one(user, { fields: [stories.creatorId], references: [user.id] }),
+  assignees: many(storyAssignees),
+}));
+
+export const storyAssigneesRelations = relations(storyAssignees, ({ one }) => ({
+  story: one(stories, {
+    fields: [storyAssignees.storyId],
+    references: [stories.id],
+  }),
+  user: one(user, { fields: [storyAssignees.userId], references: [user.id] }),
+}));

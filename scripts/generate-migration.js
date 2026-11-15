@@ -18,6 +18,7 @@ const result = spawnSync(
   ["exec", "drizzle-kit", "generate", "--name", name],
   {
     stdio: "inherit",
+    env: process.env,
   },
 );
 

@@ -36,6 +36,13 @@
       "when": 1793673585210,
       "tag": "0004_remove_sprints_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794270224144,
+      "tag": "0005_flat_spectrum",
+      "breakpoints": true
     }
   ]
 }
