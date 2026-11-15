@@ -32,6 +32,7 @@ import {
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { ProjectSwitcher } from "./project-switcher";
+import { NavUser } from "./nav-user";
 
 const groups = [
   {
@@ -132,25 +133,7 @@ export function AppSidebar() {
         </nav>
       </SidebarContent>
       <SidebarFooter className="min-h-16">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger render={<SidebarMenuButton size="lg" />}>
-                <UserCircleIcon />
-                <span>Profile</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" align="end">
-                <DropdownMenuItem
-                  render={<Link href="/preferences" />}
-                  onClick={() => setOpenMobile(false)}
-                >
-                  <SettingsIcon />
-                  Preferences
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   );
