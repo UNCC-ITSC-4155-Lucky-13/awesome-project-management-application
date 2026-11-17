@@ -171,7 +171,10 @@ export const projects = pgTable("project", (d) => ({
   updatedAt: d.timestamp({ withTimezone: true }).$onUpdate(() => new Date()),
 }));
 
-/** Cadence changes are append-only once effective. Null duration disables sprints. */
+/**
+ * Once a schedule change takes effect, keep it unchanged so past sprint dates stay the same.
+ * A null duration records when sprints were disabled.
+ */
 export const sprintScheduleChanges = pgTable(
   "sprint_schedule_change",
   (d) => ({
