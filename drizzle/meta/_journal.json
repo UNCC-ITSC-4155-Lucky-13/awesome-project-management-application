@@ -50,6 +50,13 @@
       "when": 1794467923621,
       "tag": "0006_add_comments_table",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794902556134,
+      "tag": "0007_sprint_schedule_changes",
+      "breakpoints": true
     }
   ]
 }

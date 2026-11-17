@@ -171,6 +171,25 @@ export const projects = pgTable("project", (d) => ({
   updatedAt: d.timestamp({ withTimezone: true }).$onUpdate(() => new Date()),
 }));
 
+/** Cadence changes are append-only once effective. Null duration disables sprints. */
+export const sprintScheduleChanges = pgTable(
+  "sprint_schedule_change",
+  (d) => ({
+    id: d.uuid().primaryKey().defaultRandom(),
+    projectId: d
+      .uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    startDate: d.timestamp({ withTimezone: true }).notNull(),
+    durationWeeks: d.integer(),
+    // The last old sprint is cut/extended to this change's startDate.
+    previousSprintStartDate: d.timestamp({ withTimezone: true }),
+  }),
+  (t) => [
+    unique("sprint_schedule_project_start_unique").on(t.projectId, t.startDate),
+  ],
+);
+
 /**
  * Project members/roles
  */

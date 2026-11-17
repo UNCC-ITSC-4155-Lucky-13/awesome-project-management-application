@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   projectInvites,
@@ -29,6 +29,11 @@ async function seedProject(role?: "owner" | "admin" | "member") {
 }
 
 describe("projectRouter", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
   it("creates a project with standard defaults and the caller as owner", async () => {
     const project = await createTestCaller().project.create({
       name: " Project ",
@@ -39,7 +44,9 @@ describe("projectRouter", () => {
       description: null,
       ...expectedSprintDefaults,
     });
-    expect(await db.query.projects.findFirst()).toEqual(project);
+    const { currentSprint, ...stored } = project;
+    expect(currentSprint).toBeNull();
+    expect(await db.query.projects.findFirst()).toEqual(stored);
     expect(await db.query.projectMembers.findMany()).toEqual([
       { projectId: project.id, userId: testSession.user.id, role: "owner" },
     ]);
@@ -80,10 +87,13 @@ describe("projectRouter", () => {
     const project = await db.query.projects.findFirst({
       where: eq(projects.id, projectId),
     });
-    await expect(caller.list()).resolves.toEqual([project]);
+    await expect(caller.list()).resolves.toEqual([
+      { ...project, currentSprint: null },
+    ]);
     await expect(caller.getById({ projectId })).resolves.toEqual({
       ...project,
       role: "member",
+      currentSprint: null,
     });
   });
 
@@ -112,7 +122,9 @@ describe("projectRouter", () => {
     await expect(
       caller.delete({ projectId: project.id }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(await db.query.projects.findFirst()).toEqual(project);
+    const { currentSprint, ...stored } = project;
+    expect(currentSprint).toBeNull();
+    expect(await db.query.projects.findFirst()).toEqual(stored);
   });
 
   it.each(["owner", "admin"] as const)(
@@ -132,7 +144,9 @@ describe("projectRouter", () => {
       });
 
       expect(updated).toMatchObject({ id: projectId, ...settings });
-      expect(await db.query.projects.findFirst()).toEqual(updated);
+      const { currentSprint, ...stored } = updated;
+      expect(currentSprint).toBeNull();
+      expect(await db.query.projects.findFirst()).toEqual(stored);
     },
   );
 

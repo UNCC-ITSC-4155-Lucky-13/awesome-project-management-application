@@ -1,37 +1,40 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, getTableColumns } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
+import {
+  projectListProcedure,
+  projectProcedure,
+} from "@/server/api/project-procedure";
 import { projectName } from "@/lib/project-schemas";
 import { DEFAULT_PROJECT_SETTINGS } from "@/server/constants/projects";
-import type { db } from "@/server/db";
-import { projectMembers, projects } from "@/server/db/schema";
+import {
+  projectMembers,
+  projects,
+  sprintScheduleChanges,
+} from "@/server/db/schema";
+import { changeSchedule, prepareProject } from "@/server/lib/project-sprints";
+import {
+  calculateSprints,
+  getCurrentSprint,
+  scheduleHorizon,
+} from "@/server/lib/sprints";
 
-const projectInput = z.object({ projectId: z.string().uuid() });
 const sprintSettings = z.object({
   sprintDuration: z.number().int().positive().optional(),
-  sprintStartDate: z.date().nullable().optional(),
+  sprintStartDate: z
+    .date()
+    .refine(
+      (date) =>
+        date.getUTCFullYear() >= 1000 &&
+        date.getUTCFullYear() <= 9998 &&
+        date.getTime() % 86_400_000 === 0,
+      "Use a UTC calendar date between years 1000 and 9998",
+    )
+    .nullable()
+    .optional(),
 });
-
-async function requireProjectMembership(
-  database: typeof db,
-  projectId: string,
-  userId: string,
-) {
-  const membership = await database.query.projectMembers.findFirst({
-    where: and(
-      eq(projectMembers.projectId, projectId),
-      eq(projectMembers.userId, userId),
-    ),
-  });
-
-  if (!membership) {
-    throw new TRPCError({ code: "FORBIDDEN" });
-  }
-
-  return membership;
-}
 
 export const projectRouter = createTRPCRouter({
   create: protectedProcedure
@@ -43,8 +46,8 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.transaction(async (transaction) => {
-        const [project] = await transaction
+      return ctx.db.transaction(async (tx) => {
+        const [project] = await tx
           .insert(projects)
           .values({
             name: input.name,
@@ -57,49 +60,50 @@ export const projectRouter = createTRPCRouter({
               DEFAULT_PROJECT_SETTINGS.sprintStartDate,
           })
           .returning();
-
-        await transaction.insert(projectMembers).values({
+        await tx.insert(projectMembers).values({
           projectId: project!.id,
           userId: ctx.session.user.id,
           role: "owner",
         });
-
-        return project!;
+        const changes = project!.sprintStartDate
+          ? [
+              {
+                projectId: project!.id,
+                startDate: project!.sprintStartDate,
+                durationWeeks: project!.sprintDuration,
+                previousSprintStartDate: null,
+              },
+            ]
+          : [];
+        if (changes.length)
+          await tx.insert(sprintScheduleChanges).values(changes);
+        const now = new Date();
+        return {
+          ...project!,
+          currentSprint: getCurrentSprint(
+            calculateSprints(changes, scheduleHorizon(changes, now), now),
+            now,
+          ),
+        };
       });
     }),
 
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db
-      .select(getTableColumns(projects))
-      .from(projects)
-      .innerJoin(projectMembers, eq(projectMembers.projectId, projects.id))
-      .where(eq(projectMembers.userId, ctx.session.user.id));
-  }),
+  list: projectListProcedure.query(({ ctx }) =>
+    ctx.projectStates.map(({ project, currentSprint }) => ({
+      ...project,
+      currentSprint,
+    })),
+  ),
 
-  getById: protectedProcedure
-    .input(projectInput)
-    .query(async ({ ctx, input }) => {
-      const [project] = await ctx.db
-        .select({ ...getTableColumns(projects), role: projectMembers.role })
-        .from(projects)
-        .innerJoin(projectMembers, eq(projectMembers.projectId, projects.id))
-        .where(
-          and(
-            eq(projects.id, input.projectId),
-            eq(projectMembers.userId, ctx.session.user.id),
-          ),
-        );
+  getById: projectProcedure.query(({ ctx }) => ({
+    ...ctx.project,
+    role: ctx.membership.role,
+    currentSprint: ctx.currentSprint,
+  })),
 
-      if (!project) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
-
-      return project;
-    }),
-
-  update: protectedProcedure
+  update: projectProcedure
     .input(
-      projectInput.extend({
+      z.object({
         settings: sprintSettings
           .extend({
             name: projectName.optional(),
@@ -110,43 +114,36 @@ export const projectRouter = createTRPCRouter({
               Object.values(settings).some((value) => value !== undefined),
             { message: "At least one setting must be supplied" },
           ),
+        applyTo: z.enum(["current", "next"]).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const membership = await requireProjectMembership(
-        ctx.db,
-        input.projectId,
-        ctx.session.user.id,
-      );
-
-      if (membership.role !== "owner" && membership.role !== "admin") {
+      if (ctx.membership.role !== "owner" && ctx.membership.role !== "admin")
         throw new TRPCError({ code: "FORBIDDEN" });
-      }
-
-      const [project] = await ctx.db
+      await changeSchedule(
+        ctx.db,
+        ctx.project,
+        ctx.changes,
+        input.settings,
+        input.applyTo,
+        ctx.now,
+      );
+      await ctx.db
         .update(projects)
         .set(input.settings)
-        .where(eq(projects.id, input.projectId))
-        .returning();
-
-      return project!;
-    }),
-
-  delete: protectedProcedure
-    .input(projectInput)
-    .mutation(async ({ ctx, input }) => {
-      const membership = await requireProjectMembership(
+        .where(eq(projects.id, input.projectId));
+      const state = await prepareProject(
         ctx.db,
         input.projectId,
         ctx.session.user.id,
       );
-
-      if (membership.role !== "owner") {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
-
-      await ctx.db.delete(projects).where(eq(projects.id, input.projectId));
-
-      return { success: true };
+      return { ...state.project, currentSprint: state.currentSprint };
     }),
+
+  delete: projectProcedure.mutation(async ({ ctx, input }) => {
+    if (ctx.membership.role !== "owner")
+      throw new TRPCError({ code: "FORBIDDEN" });
+    await ctx.db.delete(projects).where(eq(projects.id, input.projectId));
+    return { success: true };
+  }),
 });

@@ -2,38 +2,23 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
+import { createTRPCRouter } from "@/server/api/trpc";
 import {
-  comments,
-  projectMembers,
-  stories,
-  storyAssignees,
-} from "@/server/db/schema";
-import { type db as _db } from "@/server/db";
-
-type DB = typeof _db;
-
-const verifyProjectMembership = async (
-  database: DB,
-  projectId: string,
-  userId: string,
-): Promise<void> => {
-  const member = await database.query.projectMembers.findFirst({
-    where: and(
-      eq(projectMembers.projectId, projectId),
-      eq(projectMembers.userId, userId),
-    ),
-  });
-  if (!member) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "You are not a member of this project",
-    });
-  }
-};
-
+  projectProcedure,
+  storyProcedure,
+} from "@/server/api/project-procedure";
+import {
+  rolloverAssignment,
+  validateSprint,
+} from "@/server/lib/project-sprints";
+import {
+  calculateSprints,
+  scheduleHorizon,
+  withSprint,
+} from "@/server/lib/sprints";
+import { comments, stories, storyAssignees } from "@/server/db/schema";
 export const storyRouter = createTRPCRouter({
-  create: protectedProcedure
+  create: projectProcedure
     .input(
       z.object({
         projectId: z.string().uuid(),
@@ -50,12 +35,18 @@ export const storyRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await verifyProjectMembership(
-        ctx.db,
-        input.projectId,
-        ctx.session.user.id,
-      );
-
+      const assignmentSprints = input.sprintNumber
+        ? calculateSprints(
+            ctx.changes,
+            scheduleHorizon(
+              ctx.changes,
+              ctx.now,
+              Number(input.sprintNumber.slice(0, 4)),
+            ),
+            ctx.now,
+          )
+        : ctx.sprints;
+      validateSprint(input.sprintNumber, ctx.project, assignmentSprints);
       return await ctx.db.transaction(async (tx) => {
         const [newStory] = await tx
           .insert(stories)
@@ -66,7 +57,13 @@ export const storyRouter = createTRPCRouter({
             description: input.description,
             storyPoints: input.storyPoints,
             column: input.column,
-            sprintNumber: input.sprintNumber,
+            sprintNumber: rolloverAssignment(
+              input.sprintNumber,
+              input.column,
+              assignmentSprints,
+              ctx.currentSprint,
+              ctx.now,
+            ),
             lastMovedAt: new Date(),
           })
           .returning();
@@ -80,11 +77,11 @@ export const storyRouter = createTRPCRouter({
           );
         }
 
-        return newStory;
+        return withSprint(newStory!, assignmentSprints);
       });
     }),
 
-  getById: protectedProcedure
+  getById: storyProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const story = await ctx.db.query.stories.findFirst({
@@ -93,16 +90,22 @@ export const storyRouter = createTRPCRouter({
       });
 
       if (!story) throw new TRPCError({ code: "NOT_FOUND" });
-      await verifyProjectMembership(
-        ctx.db,
-        story.projectId,
-        ctx.session.user.id,
-      );
 
-      return story;
+      const sprints = story.sprintNumber
+        ? calculateSprints(
+            ctx.changes,
+            scheduleHorizon(
+              ctx.changes,
+              ctx.now,
+              Number(story.sprintNumber.slice(0, 4)),
+            ),
+            ctx.now,
+          )
+        : ctx.sprints;
+      return withSprint(story, sprints);
     }),
 
-  update: protectedProcedure
+  update: storyProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -135,32 +138,44 @@ export const storyRouter = createTRPCRouter({
       });
 
       if (!story) throw new TRPCError({ code: "NOT_FOUND" });
-      await verifyProjectMembership(
-        ctx.db,
-        story.projectId,
-        ctx.session.user.id,
-      );
 
+      const sprintNumber =
+        input.sprintNumber === undefined
+          ? story.sprintNumber
+          : input.sprintNumber;
+      const assignmentSprints = sprintNumber
+        ? calculateSprints(
+            ctx.changes,
+            scheduleHorizon(
+              ctx.changes,
+              ctx.now,
+              Number(sprintNumber.slice(0, 4)),
+            ),
+            ctx.now,
+          )
+        : ctx.sprints;
+      validateSprint(input.sprintNumber, ctx.project, assignmentSprints);
       return await ctx.db.transaction(async (tx) => {
         const finalUpdate: Partial<typeof stories.$inferInsert> = {
           ...updateData,
+          sprintNumber: rolloverAssignment(
+            sprintNumber,
+            input.column ?? story.column,
+            assignmentSprints,
+            ctx.currentSprint,
+            ctx.now,
+          ),
         };
 
         if (updateData.column && updateData.column !== story.column) {
           finalUpdate.lastMovedAt = new Date();
         }
 
-        let updatedStory = story;
-        // Only run the update query if there are actual fields to set
-        if (Object.keys(finalUpdate).length > 0) {
-          const [result] = await tx
-            .update(stories)
-            .set(finalUpdate)
-            .where(eq(stories.id, id))
-            .returning();
-
-          updatedStory = result!;
-        }
+        const [updatedStory] = await tx
+          .update(stories)
+          .set(finalUpdate)
+          .where(eq(stories.id, id))
+          .returning();
 
         if (assigneeIds) {
           await tx.delete(storyAssignees).where(eq(storyAssignees.storyId, id));
@@ -171,11 +186,11 @@ export const storyRouter = createTRPCRouter({
           }
         }
 
-        return updatedStory;
+        return withSprint(updatedStory!, assignmentSprints);
       });
     }),
 
-  delete: protectedProcedure
+  delete: storyProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const story = await ctx.db.query.stories.findFirst({
@@ -184,18 +199,12 @@ export const storyRouter = createTRPCRouter({
 
       if (!story) throw new TRPCError({ code: "NOT_FOUND" });
 
-      await verifyProjectMembership(
-        ctx.db,
-        story.projectId,
-        ctx.session.user.id,
-      );
-
       await ctx.db.delete(stories).where(eq(stories.id, input.id));
 
       return { success: true };
     }),
 
-  list: protectedProcedure
+  list: projectProcedure
     .input(
       z.object({
         projectId: z.string().uuid(),
@@ -206,12 +215,6 @@ export const storyRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
-      await verifyProjectMembership(
-        ctx.db,
-        input.projectId,
-        ctx.session.user.id,
-      );
-
       let whereClause = eq(stories.projectId, input.projectId);
 
       if (input.sprintNumber) {
@@ -241,7 +244,7 @@ export const storyRouter = createTRPCRouter({
         orderBy = desc(stories.storyPoints);
       else orderBy = desc(stories.createdAt); // default
 
-      return await ctx.db.query.stories.findMany({
+      const result = await ctx.db.query.stories.findMany({
         where: whereClause,
         // Include assignee display data and comment counts so list views
         // render cards in one query.
@@ -261,5 +264,15 @@ export const storyRouter = createTRPCRouter({
         },
         orderBy,
       });
+      const year = Math.max(
+        ctx.now.getUTCFullYear(),
+        ...result.map((story) => Number(story.sprintNumber?.slice(0, 4) ?? 0)),
+      );
+      const sprints = calculateSprints(
+        ctx.changes,
+        scheduleHorizon(ctx.changes, ctx.now, year),
+        ctx.now,
+      );
+      return result.map((story) => withSprint(story, sprints));
     }),
 });
