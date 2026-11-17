@@ -1,14 +1,14 @@
 import { z } from "zod";
 
 import { millisecondsInWeek } from "date-fns/constants";
-import { sprintMiddleware } from "@/server/api/sprint-middleware";
+import { projectMiddleware } from "@/server/api/project-middleware";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { calculateSprints, scheduleHorizon } from "@/server/lib/sprints";
 
 export const sprintRouter = createTRPCRouter({
   getCurrentSprint: protectedProcedure
     .input(z.object({ projectId: z.string().uuid() }))
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .query(({ ctx }) => ctx.currentSprint),
   listSprints: protectedProcedure
     .input(
@@ -19,7 +19,7 @@ export const sprintRouter = createTRPCRouter({
         year: z.number().int().min(1000).max(9998).optional(),
       }),
     )
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .query(({ ctx, input }) => {
       if (!ctx.project.sprintStartDate) return [];
       if (input.year !== undefined) {

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { sprintMiddleware } from "@/server/api/sprint-middleware";
+import { projectMiddleware } from "@/server/api/project-middleware";
 import { projectName } from "@/lib/project-schemas";
 import { DEFAULT_PROJECT_SETTINGS } from "@/server/constants/projects";
 import {
@@ -77,7 +77,7 @@ export const projectRouter = createTRPCRouter({
       });
     }),
 
-  list: protectedProcedure.use(sprintMiddleware).query(({ ctx }) =>
+  list: protectedProcedure.use(projectMiddleware).query(({ ctx }) =>
     ctx.projectStates.map(({ project, currentSprint }) => ({
       ...project,
       currentSprint,
@@ -86,7 +86,7 @@ export const projectRouter = createTRPCRouter({
 
   getById: protectedProcedure
     .input(projectInput)
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .query(({ ctx }) => ({
       ...ctx.project,
       role: ctx.membership.role,
@@ -109,7 +109,7 @@ export const projectRouter = createTRPCRouter({
         applyTo: z.enum(["current", "next"]).optional(),
       }),
     )
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .mutation(async ({ ctx, input }) => {
       if (ctx.membership.role !== "owner" && ctx.membership.role !== "admin")
         throw new TRPCError({ code: "FORBIDDEN" });
@@ -135,7 +135,7 @@ export const projectRouter = createTRPCRouter({
 
   delete: protectedProcedure
     .input(projectInput)
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .mutation(async ({ ctx, input }) => {
       if (ctx.membership.role !== "owner")
         throw new TRPCError({ code: "FORBIDDEN" });

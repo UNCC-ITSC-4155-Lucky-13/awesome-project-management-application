@@ -5,8 +5,8 @@ import { projectMembers, stories } from "@/server/db/schema";
 import { prepareProject } from "@/server/lib/project-sprints";
 import { createTRPCMiddleware } from "./trpc";
 
-/** After input validation: projectId targets a project, id targets a story, and no ID lists projects. */
-export const sprintMiddleware = createTRPCMiddleware(
+/** Verifies project membership and completes sprint rollover before the handler. */
+export const projectMiddleware = createTRPCMiddleware(
   async ({ ctx, input, next }) => {
     const ids = input as { projectId?: string; id?: string } | undefined;
     let projectIds: string[];

@@ -8,7 +8,7 @@ import {
   createTRPCRouter,
   protectedProcedure,
 } from "@/server/api/trpc";
-import { sprintMiddleware } from "@/server/api/sprint-middleware";
+import { projectMiddleware } from "@/server/api/project-middleware";
 import { projects, sprintScheduleChanges, stories } from "@/server/db/schema";
 import type { Transaction } from "@/server/lib/project-sprints";
 import {
@@ -472,9 +472,9 @@ describe("sprint API and blocking middleware", () => {
       createTRPCRouter({
         project: protectedProcedure
           .input(z.object({ projectId: z.string().uuid() }))
-          .use(sprintMiddleware)
+          .use(projectMiddleware)
           .mutation(fail),
-        list: protectedProcedure.use(sprintMiddleware).query(fail),
+        list: protectedProcedure.use(projectMiddleware).query(fail),
       }),
     )({ db, session: testSession, headers: new Headers() });
     for (const request of [

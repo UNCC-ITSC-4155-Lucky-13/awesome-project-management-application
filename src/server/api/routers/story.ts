@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { sprintMiddleware } from "@/server/api/sprint-middleware";
+import { projectMiddleware } from "@/server/api/project-middleware";
 import {
   rolloverAssignment,
   validateSprint,
@@ -31,7 +31,7 @@ export const storyRouter = createTRPCRouter({
         assigneeIds: z.array(z.string()).optional(),
       }),
     )
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .mutation(async ({ ctx, input }) => {
       const assignmentSprints = input.sprintNumber
         ? calculateSprints(
@@ -81,7 +81,7 @@ export const storyRouter = createTRPCRouter({
 
   getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .query(async ({ ctx, input }) => {
       const story = await ctx.db.query.stories.findFirst({
         where: eq(stories.id, input.id),
@@ -120,7 +120,7 @@ export const storyRouter = createTRPCRouter({
         assigneeIds: z.array(z.string()).optional(),
       }),
     )
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .mutation(async ({ ctx, input }) => {
       const { id, assigneeIds, ...updateData } = input;
 
@@ -192,7 +192,7 @@ export const storyRouter = createTRPCRouter({
 
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .mutation(async ({ ctx, input }) => {
       const story = await ctx.db.query.stories.findFirst({
         where: eq(stories.id, input.id),
@@ -215,7 +215,7 @@ export const storyRouter = createTRPCRouter({
         sort: z.enum(["createdAt", "lastMovedAt", "storyPoints"]).optional(),
       }),
     )
-    .use(sprintMiddleware)
+    .use(projectMiddleware)
     .query(async ({ ctx, input }) => {
       let whereClause = eq(stories.projectId, input.projectId);
 
