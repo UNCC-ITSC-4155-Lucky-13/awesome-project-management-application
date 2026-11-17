@@ -517,6 +517,31 @@ describe("sprint API and blocking middleware", () => {
     ).toBe("2026-2");
   });
 
+  it("re-enables today's UTC cadence at midday without skipping a sprint", async () => {
+    const p = await project();
+    await caller().project.update({
+      projectId: p.id,
+      settings: { sprintStartDate: null },
+    });
+    vi.setSystemTime(new Date("2026-04-12T12:00:00Z"));
+    const updated = await caller().project.update({
+      projectId: p.id,
+      settings: { sprintStartDate: date("2026-04-12") },
+    });
+    expect(updated.currentSprint).toEqual({
+      sprintNumber: "2026-2",
+      startDate: date("2026-04-12"),
+      endDate: date("2026-04-26"),
+      daysRemaining: 14,
+    });
+    expect(
+      (await caller().sprint.listSprints({ projectId: p.id, year: 2026 }))[0],
+    ).toMatchObject({
+      startDate: date("2026-04-06"),
+      endDate: date("2026-04-10"),
+    });
+  });
+
   it("lists upcoming sprints even when the first start is years away", async () => {
     const p = await project("2030-01-07");
     const ranges = await caller().sprint.listSprints({ projectId: p.id });

@@ -11,6 +11,7 @@ import {
 import {
   cadenceBoundary,
   calculateSprints,
+  DAY,
   getCurrentSprint,
   scheduleHorizon,
   type ScheduleChange,
@@ -135,7 +136,7 @@ export async function changeSchedule(
   )
     return;
   if (!anchor && !project.sprintStartDate) return;
-  // Replacing a pending change must start from the last effective rules.
+  // Replace pending rules while preserving already elapsed intervals.
   const elapsed = changes.filter((change) => change.startDate <= now);
   const oldSprints = calculateSprints(
     changes,
@@ -168,7 +169,14 @@ export async function changeSchedule(
       });
     }
   } else if (anchor && elapsed.length && anchor < now) {
-    startDate = cadenceBoundary(anchor, duration, now);
+    // Today's date is eligible, but never backdate across the last effective change.
+    const earliest = new Date(
+      Math.max(
+        Math.floor(now.getTime() / DAY) * DAY,
+        elapsed.at(-1)!.startDate.getTime(),
+      ),
+    );
+    startDate = cadenceBoundary(anchor, duration, earliest);
   }
   await tx
     .delete(sprintScheduleChanges)
