@@ -14,19 +14,12 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   BarChart3Icon,
   CalendarDaysIcon,
   LayoutDashboardIcon,
   PlusIcon,
   SettingsIcon,
   UserCogIcon,
-  UserCircleIcon,
   UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
