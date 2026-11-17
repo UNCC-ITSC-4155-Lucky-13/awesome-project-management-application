@@ -1,12 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  comments,
-  projectMembers,
-  projects,
-  stories,
-  user,
-} from "@/server/db/schema";
+import { comments, projects, stories, user } from "@/server/db/schema";
 import {
   createTestCaller,
   db,
@@ -14,19 +8,19 @@ import {
 } from "../../../../tests/helpers/trpc";
 
 const setupProject = async () => {
-  const [project] = await db
-    .insert(projects)
-    .values({ name: "Test Project" })
-    .returning();
-  await db.insert(projectMembers).values({
-    projectId: project!.id,
-    userId: testSession.user.id,
-    role: "owner",
+  const project = await createTestCaller().project.create({
+    name: "Test Project",
+    settings: { sprintStartDate: new Date("2026-01-05T00:00:00Z") },
   });
-  return project!;
+  return project;
 };
 
 describe("storyRouter", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
   describe("create", () => {
     it("rejects unauthenticated callers", async () => {
       await expect(
@@ -68,11 +62,11 @@ describe("storyRouter", () => {
         assigneeIds: [assigneeId],
       });
 
-      expect(story!.name).toBe("Test Story");
-      expect(story!.sprintNumber).toBe("2026-1");
+      expect(story.name).toBe("Test Story");
+      expect(story.sprintNumber).toBe("2026-1");
 
       const assigneeRecord = await db.query.storyAssignees.findFirst({
-        where: (sa, { eq }) => eq(sa.storyId, story!.id),
+        where: (sa, { eq }) => eq(sa.storyId, story.id),
       });
       expect(assigneeRecord?.userId).toBe(assigneeId);
     });
@@ -138,7 +132,7 @@ describe("storyRouter", () => {
 
       await expect(
         createTestCaller().story.update({
-          id: story!.id,
+          id: story.id,
         }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
@@ -151,12 +145,12 @@ describe("storyRouter", () => {
         column: "backlog",
       });
 
-      const oldDate = story!.lastMovedAt;
+      const oldDate = story.lastMovedAt;
 
-      await new Promise((r) => setTimeout(r, 10));
+      vi.setSystemTime(new Date(oldDate.getTime() + 10));
 
       const updated = await createTestCaller().story.update({
-        id: story!.id,
+        id: story.id,
         column: "todo",
       });
 
@@ -172,10 +166,10 @@ describe("storyRouter", () => {
         column: "backlog",
       });
 
-      const oldDate = story!.lastMovedAt;
+      const oldDate = story.lastMovedAt;
 
       const updated = await createTestCaller().story.update({
-        id: story!.id,
+        id: story.id,
         name: "Renamed",
       });
 
@@ -207,12 +201,12 @@ describe("storyRouter", () => {
       });
 
       await createTestCaller().story.update({
-        id: story!.id,
+        id: story.id,
         assigneeIds: ["user-b"],
       });
 
       const assignees = await db.query.storyAssignees.findMany({
-        where: (sa, { eq }) => eq(sa.storyId, story!.id),
+        where: (sa, { eq }) => eq(sa.storyId, story.id),
       });
 
       expect(assignees).toHaveLength(1);
@@ -235,12 +229,12 @@ describe("storyRouter", () => {
       });
 
       await createTestCaller().story.update({
-        id: story!.id,
+        id: story.id,
         assigneeIds: [],
       });
 
       const assignees = await db.query.storyAssignees.findMany({
-        where: (sa, { eq }) => eq(sa.storyId, story!.id),
+        where: (sa, { eq }) => eq(sa.storyId, story.id),
       });
 
       expect(assignees).toHaveLength(0);
@@ -255,7 +249,7 @@ describe("storyRouter", () => {
 
       await expect(
         createTestCaller().story.update({
-          id: story!.id,
+          id: story.id,
           sprintNumber: "2026_1",
         }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
@@ -313,16 +307,16 @@ describe("storyRouter", () => {
         assigneeIds: ["user-d"],
       });
 
-      const result = await createTestCaller().story.delete({ id: story!.id });
+      const result = await createTestCaller().story.delete({ id: story.id });
       expect(result.success).toBe(true);
 
       const stillThere = await db.query.stories.findFirst({
-        where: (s, { eq }) => eq(s.id, story!.id),
+        where: (s, { eq }) => eq(s.id, story.id),
       });
       expect(stillThere).toBeUndefined();
 
       const assignees = await db.query.storyAssignees.findMany({
-        where: (sa, { eq }) => eq(sa.storyId, story!.id),
+        where: (sa, { eq }) => eq(sa.storyId, story.id),
       });
       expect(assignees).toHaveLength(0);
     });
@@ -481,12 +475,12 @@ describe("storyRouter", () => {
       await caller.story.create({ projectId: project.id, name: "Quiet" });
       await db.insert(comments).values([
         {
-          storyId: discussed!.id,
+          storyId: discussed.id,
           createdBy: testSession.user.id,
           content: "a",
         },
         {
-          storyId: discussed!.id,
+          storyId: discussed.id,
           createdBy: testSession.user.id,
           content: "b",
         },
@@ -576,7 +570,7 @@ describe("storyRouter", () => {
         name: "Get Me",
       });
 
-      const fetched = await createTestCaller().story.getById({ id: story!.id });
+      const fetched = await createTestCaller().story.getById({ id: story.id });
       expect(fetched.name).toBe("Get Me");
       expect(fetched.assignees).toBeDefined();
     });

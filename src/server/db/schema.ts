@@ -172,6 +172,28 @@ export const projects = pgTable("project", (d) => ({
 }));
 
 /**
+ * Once a schedule change takes effect, keep it unchanged so past sprint dates stay the same.
+ * A null duration records when sprints were disabled.
+ */
+export const sprintScheduleChanges = pgTable(
+  "sprint_schedule_change",
+  (d) => ({
+    id: d.uuid().primaryKey().defaultRandom(),
+    projectId: d
+      .uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    startDate: d.timestamp({ withTimezone: true }).notNull(),
+    durationWeeks: d.integer(),
+    // The last old sprint is cut/extended to this change's startDate.
+    previousSprintStartDate: d.timestamp({ withTimezone: true }),
+  }),
+  (t) => [
+    unique("sprint_schedule_project_start_unique").on(t.projectId, t.startDate),
+  ],
+);
+
+/**
  * Project members/roles
  */
 export const projectMembers = pgTable(
