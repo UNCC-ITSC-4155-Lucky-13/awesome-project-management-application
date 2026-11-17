@@ -1,9 +1,14 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { projectMembers, stories, storyAssignees } from "@/server/db/schema";
+import {
+  comments,
+  projectMembers,
+  stories,
+  storyAssignees,
+} from "@/server/db/schema";
 import { type db as _db } from "@/server/db";
 
 type DB = typeof _db;
@@ -238,7 +243,22 @@ export const storyRouter = createTRPCRouter({
 
       return await ctx.db.query.stories.findMany({
         where: whereClause,
-        with: { assignees: true },
+        // Include assignee display data and comment counts so list views
+        // render cards in one query.
+        with: {
+          assignees: {
+            with: { user: { columns: { id: true, name: true, image: true } } },
+          },
+        },
+        extras: {
+          // Relational queries rewrite every column in extras to the story
+          // table's alias and skip mapWith, so name the comment column
+          // explicitly and cast the bigint count in SQL.
+          commentCount: sql<number>`(
+            select count(*)::int from ${comments}
+            where ${comments}.${sql.identifier(comments.storyId.name)} = ${stories.id}
+          )`.as("comment_count"),
+        },
         orderBy,
       });
     }),
