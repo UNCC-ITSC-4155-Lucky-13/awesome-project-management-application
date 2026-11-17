@@ -70,6 +70,10 @@ export function NavUser() {
 
   const displayName = user.name ?? user.email;
 
+  const handlePreferences = () => {
+    router.push("/preferences");
+  };
+
   const handleSignOut = async () => {
     setIsSigningOut(true);
     setSignOutError(false);
@@ -137,9 +141,9 @@ export function NavUser() {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem disabled>
-                <SettingsIcon />
-                Preferences / Account Settings
+              <DropdownMenuItem onClick={handlePreferences}>
+                <SettingsIcon aria-hidden="true" />
+                Account Preferences
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
