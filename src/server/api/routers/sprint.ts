@@ -1,19 +1,25 @@
 import { z } from "zod";
 
-import { projectProcedure } from "@/server/api/project-procedure";
-import { createTRPCRouter } from "@/server/api/trpc";
+import { millisecondsInWeek } from "date-fns/constants";
+import { sprintMiddleware } from "@/server/api/sprint-middleware";
+import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { calculateSprints, scheduleHorizon } from "@/server/lib/sprints";
 
 export const sprintRouter = createTRPCRouter({
-  getCurrentSprint: projectProcedure.query(({ ctx }) => ctx.currentSprint),
-  listSprints: projectProcedure
+  getCurrentSprint: protectedProcedure
+    .input(z.object({ projectId: z.string().uuid() }))
+    .use(sprintMiddleware)
+    .query(({ ctx }) => ctx.currentSprint),
+  listSprints: protectedProcedure
     .input(
       z.object({
+        projectId: z.string().uuid(),
         pastCount: z.number().int().min(0).max(100).default(3),
         futureCount: z.number().int().min(0).max(100).default(6),
         year: z.number().int().min(1000).max(9998).optional(),
       }),
     )
+    .use(sprintMiddleware)
     .query(({ ctx, input }) => {
       if (!ctx.project.sprintStartDate) return [];
       if (input.year !== undefined) {
@@ -34,8 +40,7 @@ export const sprintRouter = createTRPCRouter({
               1,
               ...ctx.changes.map((change) => change.durationWeeks ?? 0),
             ) *
-            7 *
-            86_400_000,
+            millisecondsInWeek,
       );
       const sprints = calculateSprints(ctx.changes, until, ctx.now);
       const index = Math.max(

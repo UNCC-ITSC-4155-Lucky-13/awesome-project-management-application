@@ -2,11 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { createTRPCRouter } from "@/server/api/trpc";
-import {
-  projectProcedure,
-  storyProcedure,
-} from "@/server/api/project-procedure";
+import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
+import { sprintMiddleware } from "@/server/api/sprint-middleware";
 import {
   rolloverAssignment,
   validateSprint,
@@ -18,7 +15,7 @@ import {
 } from "@/server/lib/sprints";
 import { comments, stories, storyAssignees } from "@/server/db/schema";
 export const storyRouter = createTRPCRouter({
-  create: projectProcedure
+  create: protectedProcedure
     .input(
       z.object({
         projectId: z.string().uuid(),
@@ -34,6 +31,7 @@ export const storyRouter = createTRPCRouter({
         assigneeIds: z.array(z.string()).optional(),
       }),
     )
+    .use(sprintMiddleware)
     .mutation(async ({ ctx, input }) => {
       const assignmentSprints = input.sprintNumber
         ? calculateSprints(
@@ -81,8 +79,9 @@ export const storyRouter = createTRPCRouter({
       });
     }),
 
-  getById: storyProcedure
+  getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
+    .use(sprintMiddleware)
     .query(async ({ ctx, input }) => {
       const story = await ctx.db.query.stories.findFirst({
         where: eq(stories.id, input.id),
@@ -105,7 +104,7 @@ export const storyRouter = createTRPCRouter({
       return withSprint(story, sprints);
     }),
 
-  update: storyProcedure
+  update: protectedProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -121,6 +120,7 @@ export const storyRouter = createTRPCRouter({
         assigneeIds: z.array(z.string()).optional(),
       }),
     )
+    .use(sprintMiddleware)
     .mutation(async ({ ctx, input }) => {
       const { id, assigneeIds, ...updateData } = input;
 
@@ -190,8 +190,9 @@ export const storyRouter = createTRPCRouter({
       });
     }),
 
-  delete: storyProcedure
+  delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
+    .use(sprintMiddleware)
     .mutation(async ({ ctx, input }) => {
       const story = await ctx.db.query.stories.findFirst({
         where: eq(stories.id, input.id),
@@ -204,7 +205,7 @@ export const storyRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  list: projectProcedure
+  list: protectedProcedure
     .input(
       z.object({
         projectId: z.string().uuid(),
@@ -214,6 +215,7 @@ export const storyRouter = createTRPCRouter({
         sort: z.enum(["createdAt", "lastMovedAt", "storyPoints"]).optional(),
       }),
     )
+    .use(sprintMiddleware)
     .query(async ({ ctx, input }) => {
       let whereClause = eq(stories.projectId, input.projectId);
 

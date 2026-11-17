@@ -1,5 +1,4 @@
-export const DAY = 86_400_000;
-const WEEK = 7 * DAY;
+import { millisecondsInDay, millisecondsInWeek } from "date-fns/constants";
 
 export type ScheduleChange = {
   startDate: Date;
@@ -32,7 +31,7 @@ export function calculateSprints(
       start < until.getTime() &&
       (!next || start < next.startDate.getTime())
     ) {
-      let end = start + change.durationWeeks * WEEK;
+      let end = start + change.durationWeeks * millisecondsInWeek;
       if (next) {
         end =
           next.previousSprintStartDate &&
@@ -50,7 +49,7 @@ export function calculateSprints(
         endDate: new Date(end),
         daysRemaining: Math.max(
           0,
-          Math.ceil((end - Math.max(now.getTime(), start)) / DAY),
+          Math.ceil((end - Math.max(now.getTime(), start)) / millisecondsInDay),
         ),
       });
       start = end;
@@ -77,7 +76,10 @@ export function scheduleHorizon(
     ...changes.map((change) => change.durationWeeks ?? 0),
   );
   return new Date(
-    Math.max(Date.UTC(year + 1, 0, 1), now.getTime() + 8 * weeks * WEEK),
+    Math.max(
+      Date.UTC(year + 1, 0, 1),
+      now.getTime() + 8 * weeks * millisecondsInWeek,
+    ),
   );
 }
 
@@ -86,7 +88,7 @@ export function cadenceBoundary(
   durationWeeks: number,
   threshold: Date,
 ) {
-  const span = durationWeeks * WEEK;
+  const span = durationWeeks * millisecondsInWeek;
   return new Date(
     anchor.getTime() +
       Math.max(0, Math.ceil((threshold.getTime() - anchor.getTime()) / span)) *

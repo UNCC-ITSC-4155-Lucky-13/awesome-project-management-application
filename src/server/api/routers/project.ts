@@ -3,10 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import {
-  projectListProcedure,
-  projectProcedure,
-} from "@/server/api/project-procedure";
+import { sprintMiddleware } from "@/server/api/sprint-middleware";
 import { projectName } from "@/lib/project-schemas";
 import { DEFAULT_PROJECT_SETTINGS } from "@/server/constants/projects";
 import {
@@ -21,19 +18,11 @@ import {
   scheduleHorizon,
 } from "@/server/lib/sprints";
 
+const projectInput = z.object({ projectId: z.string().uuid() });
+
 const sprintSettings = z.object({
   sprintDuration: z.number().int().positive().optional(),
-  sprintStartDate: z
-    .date()
-    .refine(
-      (date) =>
-        date.getUTCFullYear() >= 1000 &&
-        date.getUTCFullYear() <= 9998 &&
-        date.getTime() % 86_400_000 === 0,
-      "Use a UTC calendar date between years 1000 and 9998",
-    )
-    .nullable()
-    .optional(),
+  sprintStartDate: z.date().nullable().optional(),
 });
 
 export const projectRouter = createTRPCRouter({
@@ -46,8 +35,8 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.transaction(async (tx) => {
-        const [project] = await tx
+      return ctx.db.transaction(async (transaction) => {
+        const [project] = await transaction
           .insert(projects)
           .values({
             name: input.name,
@@ -60,7 +49,7 @@ export const projectRouter = createTRPCRouter({
               DEFAULT_PROJECT_SETTINGS.sprintStartDate,
           })
           .returning();
-        await tx.insert(projectMembers).values({
+        await transaction.insert(projectMembers).values({
           projectId: project!.id,
           userId: ctx.session.user.id,
           role: "owner",
@@ -76,7 +65,7 @@ export const projectRouter = createTRPCRouter({
             ]
           : [];
         if (changes.length)
-          await tx.insert(sprintScheduleChanges).values(changes);
+          await transaction.insert(sprintScheduleChanges).values(changes);
         const now = new Date();
         return {
           ...project!,
@@ -88,22 +77,25 @@ export const projectRouter = createTRPCRouter({
       });
     }),
 
-  list: projectListProcedure.query(({ ctx }) =>
+  list: protectedProcedure.use(sprintMiddleware).query(({ ctx }) =>
     ctx.projectStates.map(({ project, currentSprint }) => ({
       ...project,
       currentSprint,
     })),
   ),
 
-  getById: projectProcedure.query(({ ctx }) => ({
-    ...ctx.project,
-    role: ctx.membership.role,
-    currentSprint: ctx.currentSprint,
-  })),
+  getById: protectedProcedure
+    .input(projectInput)
+    .use(sprintMiddleware)
+    .query(({ ctx }) => ({
+      ...ctx.project,
+      role: ctx.membership.role,
+      currentSprint: ctx.currentSprint,
+    })),
 
-  update: projectProcedure
+  update: protectedProcedure
     .input(
-      z.object({
+      projectInput.extend({
         settings: sprintSettings
           .extend({
             name: projectName.optional(),
@@ -117,6 +109,7 @@ export const projectRouter = createTRPCRouter({
         applyTo: z.enum(["current", "next"]).optional(),
       }),
     )
+    .use(sprintMiddleware)
     .mutation(async ({ ctx, input }) => {
       if (ctx.membership.role !== "owner" && ctx.membership.role !== "admin")
         throw new TRPCError({ code: "FORBIDDEN" });
@@ -140,10 +133,13 @@ export const projectRouter = createTRPCRouter({
       return { ...state.project, currentSprint: state.currentSprint };
     }),
 
-  delete: projectProcedure.mutation(async ({ ctx, input }) => {
-    if (ctx.membership.role !== "owner")
-      throw new TRPCError({ code: "FORBIDDEN" });
-    await ctx.db.delete(projects).where(eq(projects.id, input.projectId));
-    return { success: true };
-  }),
+  delete: protectedProcedure
+    .input(projectInput)
+    .use(sprintMiddleware)
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.membership.role !== "owner")
+        throw new TRPCError({ code: "FORBIDDEN" });
+      await ctx.db.delete(projects).where(eq(projects.id, input.projectId));
+      return { success: true };
+    }),
 });

@@ -1,3 +1,4 @@
+import { millisecondsInWeek } from "date-fns/constants";
 import { TRPCError } from "@trpc/server";
 import { and, asc, eq, gt, inArray, isNotNull, ne } from "drizzle-orm";
 
@@ -11,7 +12,6 @@ import {
 import {
   cadenceBoundary,
   calculateSprints,
-  DAY,
   getCurrentSprint,
   scheduleHorizon,
   type ScheduleChange,
@@ -150,7 +150,8 @@ export async function changeSchedule(
       .filter((change) => change.startDate <= current.startDate)
       .at(-1)!;
     const originalEnd = new Date(
-      current.startDate.getTime() + activeRule.durationWeeks! * 7 * 86_400_000,
+      current.startDate.getTime() +
+        activeRule.durationWeeks! * millisecondsInWeek,
     );
     const threshold =
       mode === "next"
@@ -169,14 +170,8 @@ export async function changeSchedule(
       });
     }
   } else if (anchor && elapsed.length && anchor < now) {
-    // Today's date is eligible, but never backdate across the last effective change.
-    const earliest = new Date(
-      Math.max(
-        Math.floor(now.getTime() / DAY) * DAY,
-        elapsed.at(-1)!.startDate.getTime(),
-      ),
-    );
-    startDate = cadenceBoundary(anchor, duration, earliest);
+    // Respect the submitted timestamp without overlapping an earlier schedule.
+    startDate = cadenceBoundary(anchor, duration, elapsed.at(-1)!.startDate);
   }
   await tx
     .delete(sprintScheduleChanges)

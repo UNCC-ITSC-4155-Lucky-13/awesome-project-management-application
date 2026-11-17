@@ -1,12 +1,14 @@
 import { TRPCError } from "@trpc/server";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
-import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 import {
-  projectListProcedure,
-  projectProcedure,
-} from "@/server/api/project-procedure";
+  createCallerFactory,
+  createTRPCRouter,
+  protectedProcedure,
+} from "@/server/api/trpc";
+import { sprintMiddleware } from "@/server/api/sprint-middleware";
 import { projects, sprintScheduleChanges, stories } from "@/server/db/schema";
 import type { Transaction } from "@/server/lib/project-sprints";
 import {
@@ -123,6 +125,45 @@ describe("sprint API and blocking middleware", () => {
       (await api.project.getById({ projectId: p.id })).currentSprint,
     ).toEqual(sprint);
     expect((await api.project.list())[0]?.currentSprint).toEqual(sprint);
+  });
+
+  it.each(["+02:00", "-04:00"])(
+    "preserves the exact local-midnight instant from UTC%s",
+    async (offset) => {
+      const start = new Date(`2026-04-06T00:00:00${offset}`);
+      const changedStart = new Date(`2026-04-16T00:00:00${offset}`);
+      const p = await api.project.create({
+        name: "Local calendar",
+        settings: { sprintStartDate: start },
+      });
+      expect(p.currentSprint?.startDate).toEqual(start);
+      const changed = await api.project.update({
+        projectId: p.id,
+        settings: { sprintStartDate: changedStart },
+      });
+      expect(changed.currentSprint?.endDate).toEqual(changedStart);
+      expect(
+        (await api.sprint.listSprints({ projectId: p.id }))[1]?.startDate,
+      ).toEqual(changedStart);
+    },
+  );
+
+  it("validates endpoint input before running rollover middleware", async () => {
+    const p = await project();
+    const overdue = await seedStory(p.id, "2026-1");
+    vi.setSystemTime(date("2026-04-20"));
+    const transaction = vi.spyOn(db, "transaction");
+    try {
+      await expect(
+        api.story.create({ projectId: p.id, name: "" }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(transaction).not.toHaveBeenCalled();
+      expect(await readStory(overdue.id)).toMatchObject({
+        sprintNumber: "2026-1",
+      });
+    } finally {
+      transaction.mockRestore();
+    }
   });
 
   it("returns surrounding ranges, supports zero counts and year filters", async () => {
@@ -429,8 +470,11 @@ describe("sprint API and blocking middleware", () => {
     };
     const failing = createCallerFactory(
       createTRPCRouter({
-        project: projectProcedure.mutation(fail),
-        list: projectListProcedure.query(fail),
+        project: protectedProcedure
+          .input(z.object({ projectId: z.string().uuid() }))
+          .use(sprintMiddleware)
+          .mutation(fail),
+        list: protectedProcedure.use(sprintMiddleware).query(fail),
       }),
     )({ db, session: testSession, headers: new Headers() });
     for (const request of [
@@ -498,24 +542,33 @@ describe("sprint API and blocking middleware", () => {
     ).toBe("2026-2");
   });
 
-  it("re-enables today's UTC cadence at midday without skipping a sprint", async () => {
-    const p = await project();
-    await setSprintStart(p.id, null);
-    vi.setSystemTime(new Date("2026-04-12T12:00:00Z"));
-    const updated = await setSprintStart(p.id, "2026-04-12");
-    expect(updated.currentSprint).toEqual({
-      sprintNumber: "2026-2",
-      startDate: date("2026-04-12"),
-      endDate: date("2026-04-26"),
-      daysRemaining: 14,
-    });
-    expect(
-      (await api.sprint.listSprints({ projectId: p.id, year: 2026 }))[0],
-    ).toMatchObject({
-      startDate: date("2026-04-06"),
-      endDate: date("2026-04-10"),
-    });
-  });
+  it.each([
+    ["2026-04-12T00:00:00Z", "2026-04-12T12:00:00Z", "2026-04-26T00:00:00Z"],
+    ["2026-04-12T22:00:00Z", "2026-04-13T12:00:00Z", "2026-04-26T22:00:00Z"],
+  ])(
+    "re-enables at %s without skipping the selected start",
+    async (start, now, end) => {
+      const p = await project();
+      await setSprintStart(p.id, null);
+      vi.setSystemTime(new Date(now));
+      const updated = await api.project.update({
+        projectId: p.id,
+        settings: { sprintStartDate: new Date(start) },
+      });
+      expect(updated.currentSprint).toEqual({
+        sprintNumber: "2026-2",
+        startDate: new Date(start),
+        endDate: new Date(end),
+        daysRemaining: 14,
+      });
+      expect(
+        (await api.sprint.listSprints({ projectId: p.id, year: 2026 }))[0],
+      ).toMatchObject({
+        startDate: date("2026-04-06"),
+        endDate: date("2026-04-10"),
+      });
+    },
+  );
 
   it("immediately catches up expired assignments and reopened completed issues", async () => {
     const p = await project();
