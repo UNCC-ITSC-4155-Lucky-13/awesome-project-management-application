@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { projectMembers, projects, stories, user } from "@/server/db/schema";
+import {
+  comments,
+  projectMembers,
+  projects,
+  stories,
+  user,
+} from "@/server/db/schema";
 import {
   createTestCaller,
   db,
@@ -430,6 +436,67 @@ describe("storyRouter", () => {
 
       expect(list).toHaveLength(1);
       expect(list[0]?.name).toBe("Assigned");
+    });
+
+    it("includes assignee display details for issue cards", async () => {
+      const project = await setupProject();
+      await db.insert(user).values({
+        id: "user-card",
+        name: "Card Person",
+        email: "card@example.com",
+        emailVerified: true,
+        image: "https://example.com/avatar.png",
+      });
+
+      await createTestCaller().story.create({
+        projectId: project.id,
+        name: "Card story",
+        assigneeIds: ["user-card"],
+      });
+
+      const [listed] = await createTestCaller().story.list({
+        projectId: project.id,
+      });
+
+      expect(listed?.assignees).toEqual([
+        {
+          storyId: listed?.id,
+          userId: "user-card",
+          user: {
+            id: "user-card",
+            name: "Card Person",
+            image: "https://example.com/avatar.png",
+          },
+        },
+      ]);
+    });
+
+    it("counts comments per story", async () => {
+      const project = await setupProject();
+      const caller = createTestCaller();
+      const discussed = await caller.story.create({
+        projectId: project.id,
+        name: "Discussed",
+      });
+      await caller.story.create({ projectId: project.id, name: "Quiet" });
+      await db.insert(comments).values([
+        {
+          storyId: discussed!.id,
+          createdBy: testSession.user.id,
+          content: "a",
+        },
+        {
+          storyId: discussed!.id,
+          createdBy: testSession.user.id,
+          content: "b",
+        },
+      ]);
+
+      const listed = await caller.story.list({ projectId: project.id });
+
+      expect(
+        Object.fromEntries(listed.map((s) => [s.name, s.commentCount])),
+      ).toEqual({ Discussed: 2, Quiet: 0 });
     });
 
     it("sorts by storyPoints", async () => {

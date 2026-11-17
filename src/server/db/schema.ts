@@ -366,6 +366,7 @@ export const storiesRelations = relations(stories, ({ one, many }) => ({
   }),
   creator: one(user, { fields: [stories.creatorId], references: [user.id] }),
   assignees: many(storyAssignees),
+  comments: many(comments),
 }));
 
 export const storyAssigneesRelations = relations(storyAssignees, ({ one }) => ({
