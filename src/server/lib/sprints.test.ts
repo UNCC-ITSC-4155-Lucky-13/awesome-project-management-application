@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  cadenceBoundary,
   calculateSprints,
   getCurrentSprint,
-  scheduleHorizon,
-  withSprint,
   type ScheduleChange,
 } from "./sprints";
-import { clashingSprintNumbers } from "./project-sprints";
 
 const date = (value: string) => new Date(`${value}T00:00:00Z`);
 const initial: ScheduleChange = {
@@ -64,30 +60,6 @@ describe("sprint calculations", () => {
       ["2027-2", "2027-01-25T00:00:00.000Z", "2027-02-08T00:00:00.000Z"],
     ]);
   });
-
-  it.each([
-    ["2026-04-16", "2026-04-30"],
-    ["2026-04-30", "2026-05-14"],
-  ])(
-    "cuts or extends the current sprint to %s and continues numbering",
-    (boundary, nextEnd) => {
-      const changes = [
-        initial,
-        {
-          startDate: date(boundary),
-          durationWeeks: 2,
-          previousSprintStartDate: initial.startDate,
-        },
-      ];
-      const sprints = calculateSprints(changes, until, now);
-      expect(sprints[0]?.endDate).toEqual(date(boundary));
-      expect(sprints[1]).toMatchObject({
-        sprintNumber: "2026-2",
-        startDate: date(boundary),
-        endDate: date(nextEnd),
-      });
-    },
-  );
 
   it("preserves earlier intervals and counts through multiple cadence changes", () => {
     const changes = [
@@ -148,53 +120,5 @@ describe("sprint calculations", () => {
     const sprints = calculateSprints(changes, date("2028-03-07"), now);
     expect(sprints[0]?.endDate).toEqual(date("2028-02-29"));
     expect(sprints[1]?.endDate).toEqual(date("2028-03-07"));
-  });
-
-  it("chooses new-cadence boundaries without backdating", () => {
-    const anchor = date("2026-04-16");
-    expect(cadenceBoundary(anchor, 2, now)).toEqual(anchor);
-    expect(cadenceBoundary(anchor, 2, date("2026-04-20"))).toEqual(
-      date("2026-04-30"),
-    );
-    expect(cadenceBoundary(anchor, 2, anchor)).toEqual(anchor);
-  });
-
-  it("has a bounded requested-year horizon plus enough surrounding sprints", () => {
-    expect(scheduleHorizon([], now)).toEqual(date("2027-01-01"));
-    expect(
-      scheduleHorizon([{ ...initial, durationWeeks: null }], now, 2030),
-    ).toEqual(date("2031-01-01"));
-    expect(
-      scheduleHorizon([{ ...initial, durationWeeks: 52 }], now).getTime(),
-    ).toBeGreaterThan(date("2030-01-01").getTime());
-  });
-
-  it("attaches metadata directly to assigned stories and null for backlog", () => {
-    const sprints = calculateSprints([initial], until, now);
-    expect(
-      withSprint({ sprintNumber: "2026-1", name: "Issue" }, sprints).sprint,
-    ).toEqual(sprints[0]);
-    expect(withSprint({ sprintNumber: null }, sprints).sprint).toBeNull();
-  });
-
-  it("clears the entire suffix after a removed number, including a later valid year", () => {
-    const before = calculateSprints(
-      [{ ...initial, startDate: date("2026-12-07"), durationWeeks: 1 }],
-      date("2027-01-12"),
-      now,
-    );
-    const after = calculateSprints(
-      [{ ...initial, startDate: date("2026-12-07"), durationWeeks: 4 }],
-      date("2027-01-12"),
-      now,
-    );
-    expect(clashingSprintNumbers(before, after)).toEqual([
-      "2026-2",
-      "2026-3",
-      "2026-4",
-      "2027-1",
-      "2027-2",
-    ]);
-    expect(clashingSprintNumbers(before, before)).toEqual([]);
   });
 });

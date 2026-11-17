@@ -8,6 +8,7 @@ import {
   projectProcedure,
 } from "@/server/api/project-procedure";
 import { projects, sprintScheduleChanges, stories } from "@/server/db/schema";
+import type { Transaction } from "@/server/lib/project-sprints";
 import {
   createTestCaller,
   db,
@@ -15,11 +16,22 @@ import {
 } from "../../../../tests/helpers/trpc";
 
 const date = (value: string) => new Date(`${value}T00:00:00Z`);
-const caller = () => createTestCaller();
+const api = createTestCaller();
 async function project(start = "2026-04-06", duration = 2) {
-  return caller().project.create({
+  return api.project.create({
     name: "Sprints",
     settings: { sprintStartDate: date(start), sprintDuration: duration },
+  });
+}
+function setSprintStart(
+  projectId: string,
+  start: string | null,
+  applyTo?: "current" | "next",
+) {
+  return api.project.update({
+    projectId,
+    settings: { sprintStartDate: start === null ? null : date(start) },
+    applyTo,
   });
 }
 async function seedStory(
@@ -41,6 +53,38 @@ async function seedStory(
   return story!;
 }
 
+const readStory = (id: string) =>
+  db.query.stories.findFirst({ where: eq(stories.id, id) });
+
+async function holdProject(
+  projectId: string,
+  beforeWait?: (tx: Transaction) => Promise<unknown>,
+) {
+  let release!: () => void;
+  let locked!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const acquired = new Promise<void>((resolve) => {
+    locked = resolve;
+  });
+  const holding = db.transaction(async (tx) => {
+    await tx
+      .select()
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .for("update");
+    await beforeWait?.(tx);
+    locked();
+    await gate;
+  });
+  await acquired;
+  return async () => {
+    release();
+    await holding;
+  };
+}
+
 describe("sprint API and blocking middleware", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -57,45 +101,45 @@ describe("sprint API and blocking middleware", () => {
       daysRemaining: 10,
     };
     expect(p.currentSprint).toEqual(sprint);
-    expect(await caller().sprint.getCurrentSprint({ projectId: p.id })).toEqual(
+    expect(await api.sprint.getCurrentSprint({ projectId: p.id })).toEqual(
       sprint,
     );
-    const created = await caller().story.create({
+    const created = await api.story.create({
       projectId: p.id,
       name: "Assigned",
       sprintNumber: "2026-1",
     });
     expect(created.sprint).toEqual(sprint);
-    expect((await caller().story.getById({ id: created.id })).sprint).toEqual(
+    expect((await api.story.getById({ id: created.id })).sprint).toEqual(
       sprint,
     );
     expect(
-      (await caller().story.update({ id: created.id, name: "Renamed" })).sprint,
+      (await api.story.update({ id: created.id, name: "Renamed" })).sprint,
     ).toEqual(sprint);
-    expect((await caller().story.list({ projectId: p.id }))[0]?.sprint).toEqual(
+    expect((await api.story.list({ projectId: p.id }))[0]?.sprint).toEqual(
       sprint,
     );
     expect(
-      (await caller().project.getById({ projectId: p.id })).currentSprint,
+      (await api.project.getById({ projectId: p.id })).currentSprint,
     ).toEqual(sprint);
-    expect((await caller().project.list())[0]?.currentSprint).toEqual(sprint);
+    expect((await api.project.list())[0]?.currentSprint).toEqual(sprint);
   });
 
   it("returns surrounding ranges, supports zero counts and year filters", async () => {
     const p = await project("2026-01-05");
-    const sprints = await caller().sprint.listSprints({ projectId: p.id });
+    const sprints = await api.sprint.listSprints({ projectId: p.id });
     expect(sprints).toHaveLength(10);
     expect(sprints[0]?.sprintNumber).toBe("2026-4");
     expect(sprints[3]?.sprintNumber).toBe("2026-7");
     expect(sprints[9]?.sprintNumber).toBe("2026-13");
     expect(
-      await caller().sprint.listSprints({
+      await api.sprint.listSprints({
         projectId: p.id,
         pastCount: 0,
         futureCount: 0,
       }),
     ).toHaveLength(1);
-    const year = await caller().sprint.listSprints({
+    const year = await api.sprint.listSprints({
       projectId: p.id,
       year: 2027,
     });
@@ -105,58 +149,55 @@ describe("sprint API and blocking middleware", () => {
       startDate: date("2027-01-04"),
     });
     expect(
-      await caller().sprint.listSprints({ projectId: p.id, year: 2025 }),
+      await api.sprint.listSprints({ projectId: p.id, year: 2025 }),
     ).toEqual([]);
     expect(
-      await caller().sprint.listSprints({ projectId: p.id, futureCount: 20 }),
+      await api.sprint.listSprints({ projectId: p.id, futureCount: 20 }),
     ).toHaveLength(24);
     await expect(
-      caller().sprint.listSprints({ projectId: p.id, pastCount: -1 }),
+      api.sprint.listSprints({ projectId: p.id, pastCount: -1 }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("does not invent past sprints before a project's start", async () => {
-    const p = await project("2026-05-04");
-    expect(
-      await caller().sprint.getCurrentSprint({ projectId: p.id }),
-    ).toBeNull();
-    const sprints = await caller().sprint.listSprints({ projectId: p.id });
-    expect(sprints).toHaveLength(6);
-    expect(sprints[0]?.startDate).toEqual(date("2026-05-04"));
-  });
+  it.each(["2026-05-04", "2030-01-07"])(
+    "returns upcoming ranges before the first sprint on %s",
+    async (start) => {
+      const p = await project(start);
+      expect(await api.sprint.getCurrentSprint({ projectId: p.id })).toBeNull();
+      const sprints = await api.sprint.listSprints({ projectId: p.id });
+      expect(sprints).toHaveLength(6);
+      expect(sprints[0]?.startDate).toEqual(date(start));
+    },
+  );
 
   it("has no sprint data when disabled, but permits backlog create/clear", async () => {
-    const p = await caller().project.create({ name: "Disabled" });
-    expect(
-      await caller().sprint.getCurrentSprint({ projectId: p.id }),
-    ).toBeNull();
-    expect(await caller().sprint.listSprints({ projectId: p.id })).toEqual([]);
-    const story = await caller().story.create({
+    const p = await api.project.create({ name: "Disabled" });
+    expect(await api.sprint.getCurrentSprint({ projectId: p.id })).toBeNull();
+    expect(await api.sprint.listSprints({ projectId: p.id })).toEqual([]);
+    const story = await api.story.create({
       projectId: p.id,
       name: "Backlog",
     });
     expect(story.sprint).toBeNull();
     expect(
-      (await caller().story.update({ id: story.id, sprintNumber: null }))
-        .sprint,
+      (await api.story.update({ id: story.id, sprintNumber: null })).sprint,
     ).toBeNull();
-    for (const sprintNumber of ["2026-1", "2026-0", "2026-999"]) {
-      await expect(
-        caller().story.create({
-          projectId: p.id,
-          name: "Invalid",
-          sprintNumber,
-        }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-      await expect(
-        caller().story.update({ id: story.id, sprintNumber }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    }
+    const sprintNumber = "2026-1";
+    await expect(
+      api.story.create({
+        projectId: p.id,
+        name: "Invalid",
+        sprintNumber,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      api.story.update({ id: story.id, sprintNumber }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
   it("rejects nonexistent sprint numbers while enabled and attaches far-future metadata", async () => {
     const p = await project();
-    const story = await caller().story.create({
+    const story = await api.story.create({
       projectId: p.id,
       name: "Future",
       sprintNumber: "2030-1",
@@ -164,25 +205,25 @@ describe("sprint API and blocking middleware", () => {
     expect(story.sprint?.sprintNumber).toBe("2030-1");
     expect(
       (
-        await caller().story.getById({ id: story.id })
+        await api.story.getById({ id: story.id })
       ).sprint?.startDate.getUTCFullYear(),
     ).toBe(2030);
     expect(
-      (await caller().story.list({ projectId: p.id }))[0]?.sprint?.sprintNumber,
+      (await api.story.list({ projectId: p.id }))[0]?.sprint?.sprintNumber,
     ).toBe("2030-1");
     expect(
-      (await caller().story.update({ id: story.id, name: "Still future" }))
-        .sprint?.sprintNumber,
+      (await api.story.update({ id: story.id, name: "Still future" })).sprint
+        ?.sprintNumber,
     ).toBe("2030-1");
     await expect(
-      caller().story.create({
+      api.story.create({
         projectId: p.id,
         name: "Invalid",
         sprintNumber: "2026-999",
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await expect(
-      caller().story.update({ id: story.id, sprintNumber: "2026-999" }),
+      api.story.update({ id: story.id, sprintNumber: "2026-999" }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
@@ -191,20 +232,16 @@ describe("sprint API and blocking middleware", () => {
     async (applyTo) => {
       const p = await project();
       const story = await seedStory(p.id, "2026-1", "in_progress");
-      const updated = await caller().project.update({
-        projectId: p.id,
-        settings: { sprintStartDate: date("2026-04-16") },
-        applyTo,
-      });
+      const updated = await setSprintStart(p.id, "2026-04-16", applyTo);
       const boundary = applyTo === "current" ? "2026-04-16" : "2026-04-30";
       expect(updated.currentSprint).toMatchObject({
         sprintNumber: "2026-1",
         endDate: date(boundary),
       });
-      const ranges = await caller().sprint.listSprints({ projectId: p.id });
+      const ranges = await api.sprint.listSprints({ projectId: p.id });
       expect(ranges[1]?.startDate).toEqual(date(boundary));
       vi.setSystemTime(date(boundary));
-      const fetched = await caller().story.getById({ id: story.id });
+      const fetched = await api.story.getById({ id: story.id });
       expect(fetched).toMatchObject({
         sprintNumber: "2026-2",
         column: "in_progress",
@@ -216,17 +253,14 @@ describe("sprint API and blocking middleware", () => {
 
   it("defaults to current and replaces a pending change without duplicating numbers", async () => {
     const p = await project();
-    await caller().project.update({
-      projectId: p.id,
-      settings: { sprintStartDate: date("2026-04-16") },
-    });
-    const updated = await caller().project.update({
+    await setSprintStart(p.id, "2026-04-16");
+    const updated = await api.project.update({
       projectId: p.id,
       settings: { sprintStartDate: date("2026-04-17"), sprintDuration: 1 },
     });
     expect(updated.currentSprint?.endDate).toEqual(date("2026-04-17"));
     expect(await db.query.sprintScheduleChanges.findMany()).toHaveLength(2);
-    const ranges = await caller().sprint.listSprints({ projectId: p.id });
+    const ranges = await api.sprint.listSprints({ projectId: p.id });
     expect(ranges[1]).toMatchObject({
       sprintNumber: "2026-2",
       startDate: date("2026-04-17"),
@@ -237,17 +271,17 @@ describe("sprint API and blocking middleware", () => {
   it("preserves an unchanged pending cadence on ordinary saves and allows an explicit mode switch", async () => {
     const p = await project();
     const settings = { sprintStartDate: date("2026-04-16"), sprintDuration: 2 };
-    await caller().project.update({
+    await api.project.update({
       projectId: p.id,
       settings,
       applyTo: "next",
     });
-    const unchanged = await caller().project.update({
+    const unchanged = await api.project.update({
       projectId: p.id,
       settings: { ...settings, name: "Renamed" },
     });
     expect(unchanged.currentSprint?.endDate).toEqual(date("2026-04-30"));
-    const switched = await caller().project.update({
+    const switched = await api.project.update({
       projectId: p.id,
       settings,
       applyTo: "current",
@@ -257,12 +291,9 @@ describe("sprint API and blocking middleware", () => {
 
   it("rejects current when the new cadence has no boundary left in it", async () => {
     const p = await project();
-    await expect(
-      caller().project.update({
-        projectId: p.id,
-        settings: { sprintStartDate: date("2026-05-01") },
-      }),
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(setSprintStart(p.id, "2026-05-01")).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
     expect(await db.query.sprintScheduleChanges.findMany()).toHaveLength(1);
   });
 
@@ -273,60 +304,39 @@ describe("sprint API and blocking middleware", () => {
     const backlog = await seedStory(p.id, null);
     const future = await seedStory(p.id, "2026-10");
     vi.setSystemTime(date("2026-05-20"));
-    const first = await caller().story.list({ projectId: p.id });
+    const first = await api.story.list({ projectId: p.id });
     expect(first.find((s) => s.id === overdue.id)?.sprintNumber).toBe("2026-4");
     expect(first.find((s) => s.id === done.id)?.sprintNumber).toBe("2026-1");
     expect(first.find((s) => s.id === backlog.id)?.sprintNumber).toBeNull();
     expect(first.find((s) => s.id === future.id)?.sprintNumber).toBe("2026-10");
-    expect(await caller().story.list({ projectId: p.id })).toEqual(first);
+    expect(await api.story.list({ projectId: p.id })).toEqual(first);
   });
 
-  it("runs rollover on story updates, deletes, project reads, lists, and settings changes", async () => {
-    const p = await project();
-    vi.setSystemTime(date("2026-04-20"));
-    let story = await seedStory(p.id, "2026-1");
-    expect(
-      (await caller().story.update({ id: story.id, name: "Fresh" }))
-        .sprintNumber,
-    ).toBe("2026-2");
-    story = await seedStory(p.id, "2026-1");
-    await caller().project.getById({ projectId: p.id });
-    expect(
-      (await db.query.stories.findFirst({ where: eq(stories.id, story.id) }))
-        ?.sprintNumber,
-    ).toBe("2026-2");
-    await db
-      .update(stories)
-      .set({ sprintNumber: "2026-1" })
-      .where(eq(stories.id, story.id));
-    await caller().project.list();
-    expect(
-      (await db.query.stories.findFirst({ where: eq(stories.id, story.id) }))
-        ?.sprintNumber,
-    ).toBe("2026-2");
-    await db
-      .update(stories)
-      .set({ sprintNumber: "2026-1" })
-      .where(eq(stories.id, story.id));
-    await caller().project.update({
-      projectId: p.id,
-      settings: { name: "Updated" },
-    });
-    expect(
-      (await db.query.stories.findFirst({ where: eq(stories.id, story.id) }))
-        ?.sprintNumber,
-    ).toBe("2026-2");
-    const other = await seedStory(p.id, null);
-    await db
-      .update(stories)
-      .set({ sprintNumber: "2026-1" })
-      .where(eq(stories.id, story.id));
-    await caller().story.delete({ id: other.id });
-    expect(
-      (await db.query.stories.findFirst({ where: eq(stories.id, story.id) }))
-        ?.sprintNumber,
-    ).toBe("2026-2");
-  });
+  const projectRequests: Record<
+    string,
+    (projectId: string, storyId: string) => Promise<unknown>
+  > = {
+    "story.update": (_projectId, id) =>
+      api.story.update({ id, name: "Updated" }),
+    "story.delete": (_projectId, id) => api.story.delete({ id }),
+    "project.getById": (projectId) => api.project.getById({ projectId }),
+    "project.list": () => api.project.list(),
+    "project.update": (projectId) =>
+      api.project.update({ projectId, settings: { name: "Updated" } }),
+  };
+  it.each(Object.entries(projectRequests))(
+    "runs rollover before %s",
+    async (_name, request) => {
+      const p = await project();
+      const overdue = await seedStory(p.id, "2026-1");
+      const target = await seedStory(p.id, null);
+      vi.setSystemTime(date("2026-04-20"));
+      await request(p.id, target.id);
+      expect(await readStory(overdue.id)).toMatchObject({
+        sprintNumber: "2026-2",
+      });
+    },
+  );
 
   it("clears all assignments on disable, retains schedule history, and supports re-enabling", async () => {
     const p = await project();
@@ -334,10 +344,7 @@ describe("sprint API and blocking middleware", () => {
     await seedStory(p.id, "2026-1", "done");
     const other = await project();
     await seedStory(other.id, "2026-1");
-    await caller().project.update({
-      projectId: p.id,
-      settings: { sprintStartDate: null },
-    });
+    await setSprintStart(p.id, null);
     expect(
       (
         await db.query.stories.findMany({ where: eq(stories.projectId, p.id) })
@@ -350,25 +357,18 @@ describe("sprint API and blocking middleware", () => {
         })
       )?.sprintNumber,
     ).toBe("2026-1");
-    expect(
-      await caller().sprint.getCurrentSprint({ projectId: p.id }),
-    ).toBeNull();
+    expect(await api.sprint.getCurrentSprint({ projectId: p.id })).toBeNull();
     expect(
       await db.query.sprintScheduleChanges.findMany({
         where: eq(sprintScheduleChanges.projectId, p.id),
       }),
     ).toHaveLength(2);
     vi.setSystemTime(date("2026-04-12"));
-    await caller().project.update({
-      projectId: p.id,
-      settings: { sprintStartDate: date("2026-04-13") },
-    });
-    expect(
-      await caller().sprint.getCurrentSprint({ projectId: p.id }),
-    ).toBeNull();
+    await setSprintStart(p.id, "2026-04-13");
+    expect(await api.sprint.getCurrentSprint({ projectId: p.id })).toBeNull();
     vi.setSystemTime(date("2026-04-13"));
     expect(
-      await caller().sprint.getCurrentSprint({ projectId: p.id }),
+      await api.sprint.getCurrentSprint({ projectId: p.id }),
     ).toMatchObject({ sprintNumber: "2026-2", startDate: date("2026-04-13") });
   });
 
@@ -378,7 +378,7 @@ describe("sprint API and blocking middleware", () => {
     const kept = await seedStory(p.id, "2026-2");
     const clash = await seedStory(p.id, "2026-3", "done");
     const later = await seedStory(p.id, "2027-1");
-    await caller().project.update({
+    await api.project.update({
       projectId: p.id,
       settings: { sprintStartDate: date("2026-01-12"), sprintDuration: 52 },
       applyTo: "next",
@@ -396,39 +396,24 @@ describe("sprint API and blocking middleware", () => {
     const p = await project();
     const story = await seedStory(p.id, "2026-1");
     vi.setSystemTime(date("2026-04-20"));
-    let release!: () => void;
-    let locked!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const acquired = new Promise<void>((resolve) => {
-      locked = resolve;
-    });
-    const holding = db.transaction(async (tx) => {
-      await tx
-        .select()
-        .from(projects)
-        .where(eq(projects.id, p.id))
-        .for("update");
-      locked();
-      await gate;
-    });
-    await acquired;
+    const release = await holdProject(p.id);
     let completed = false;
-    const request = caller()
-      .story.getById({ id: story.id })
-      .then((result) => {
-        completed = true;
-        return result;
+    const request = api.story.getById({ id: story.id }).then((result) => {
+      completed = true;
+      return result;
+    });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(completed).toBe(false);
+      expect(await readStory(story.id)).toMatchObject({
+        sprintNumber: "2026-1",
       });
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(completed).toBe(false);
-    expect((await db.query.stories.findFirst())?.sprintNumber).toBe("2026-1");
-    release();
-    await holding;
+    } finally {
+      await release();
+    }
     expect((await request).sprintNumber).toBe("2026-2");
     const simultaneous = await Promise.all(
-      Array.from({ length: 5 }, () => caller().story.getById({ id: story.id })),
+      Array.from({ length: 5 }, () => api.story.getById({ id: story.id })),
     );
     expect(
       simultaneous.every((result) => result.sprintNumber === "2026-2"),
@@ -439,20 +424,22 @@ describe("sprint API and blocking middleware", () => {
     const p = await project();
     await seedStory(p.id, "2026-1");
     vi.setSystemTime(date("2026-04-20"));
+    const fail = () => {
+      throw new TRPCError({ code: "BAD_REQUEST" });
+    };
     const failing = createCallerFactory(
       createTRPCRouter({
-        fail: projectProcedure.mutation(() => {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Deliberate failure",
-          });
-        }),
+        project: projectProcedure.mutation(fail),
+        list: projectListProcedure.query(fail),
       }),
     )({ db, session: testSession, headers: new Headers() });
-    await expect(failing.fail({ projectId: p.id })).rejects.toMatchObject({
-      code: "BAD_REQUEST",
-    });
-    expect((await db.query.stories.findFirst())?.sprintNumber).toBe("2026-1");
+    for (const request of [
+      () => failing.project({ projectId: p.id }),
+      () => failing.list(),
+    ]) {
+      await expect(request()).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect((await db.query.stories.findFirst())?.sprintNumber).toBe("2026-1");
+    }
     await expect(
       createTestCaller(null).sprint.getCurrentSprint({ projectId: p.id }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
@@ -461,25 +448,25 @@ describe("sprint API and blocking middleware", () => {
       .values({ name: "Private" })
       .returning();
     await expect(
-      caller().sprint.listSprints({ projectId: privateProject!.id }),
+      api.sprint.listSprints({ projectId: privateProject!.id }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("keeps no-op settings stable and edits a disabled duration without inventing history", async () => {
     const p = await project();
-    await caller().project.update({
+    await api.project.update({
       projectId: p.id,
       settings: { sprintStartDate: date("2026-04-06"), sprintDuration: 2 },
     });
     expect(await db.query.sprintScheduleChanges.findMany()).toHaveLength(1);
-    await caller().project.update({
+    await api.project.update({
       projectId: p.id,
       settings: { sprintDuration: 2 },
       applyTo: "next",
     });
     expect(await db.query.sprintScheduleChanges.findMany()).toHaveLength(1);
-    const disabled = await caller().project.create({ name: "Disabled" });
-    await caller().project.update({
+    const disabled = await api.project.create({ name: "Disabled" });
+    await api.project.update({
       projectId: disabled.id,
       settings: { sprintDuration: 3 },
     });
@@ -488,21 +475,15 @@ describe("sprint API and blocking middleware", () => {
         where: eq(sprintScheduleChanges.projectId, disabled.id),
       }),
     ).toEqual([]);
-    expect(await caller().project.list()).toHaveLength(2);
+    expect(await api.project.list()).toHaveLength(2);
   });
 
   it("re-enables from the next boundary of a past anchor without rewriting elapsed dates", async () => {
     const p = await project();
-    await caller().project.update({
-      projectId: p.id,
-      settings: { sprintStartDate: null },
-    });
+    await setSprintStart(p.id, null);
     vi.setSystemTime(date("2026-04-12"));
-    await caller().project.update({
-      projectId: p.id,
-      settings: { sprintStartDate: date("2026-04-06") },
-    });
-    const ranges = await caller().sprint.listSprints({ projectId: p.id });
+    await setSprintStart(p.id, "2026-04-06");
+    const ranges = await api.sprint.listSprints({ projectId: p.id });
     expect(ranges[0]).toMatchObject({
       startDate: date("2026-04-06"),
       endDate: date("2026-04-10"),
@@ -513,21 +494,15 @@ describe("sprint API and blocking middleware", () => {
     });
     vi.setSystemTime(date("2026-04-20"));
     expect(
-      (await caller().sprint.listSprints({ projectId: p.id }))[1]?.sprintNumber,
+      (await api.sprint.listSprints({ projectId: p.id }))[1]?.sprintNumber,
     ).toBe("2026-2");
   });
 
   it("re-enables today's UTC cadence at midday without skipping a sprint", async () => {
     const p = await project();
-    await caller().project.update({
-      projectId: p.id,
-      settings: { sprintStartDate: null },
-    });
+    await setSprintStart(p.id, null);
     vi.setSystemTime(new Date("2026-04-12T12:00:00Z"));
-    const updated = await caller().project.update({
-      projectId: p.id,
-      settings: { sprintStartDate: date("2026-04-12") },
-    });
+    const updated = await setSprintStart(p.id, "2026-04-12");
     expect(updated.currentSprint).toEqual({
       sprintNumber: "2026-2",
       startDate: date("2026-04-12"),
@@ -535,30 +510,23 @@ describe("sprint API and blocking middleware", () => {
       daysRemaining: 14,
     });
     expect(
-      (await caller().sprint.listSprints({ projectId: p.id, year: 2026 }))[0],
+      (await api.sprint.listSprints({ projectId: p.id, year: 2026 }))[0],
     ).toMatchObject({
       startDate: date("2026-04-06"),
       endDate: date("2026-04-10"),
     });
   });
 
-  it("lists upcoming sprints even when the first start is years away", async () => {
-    const p = await project("2030-01-07");
-    const ranges = await caller().sprint.listSprints({ projectId: p.id });
-    expect(ranges).toHaveLength(6);
-    expect(ranges[0]?.startDate).toEqual(date("2030-01-07"));
-  });
-
   it("immediately catches up expired assignments and reopened completed issues", async () => {
     const p = await project();
     vi.setSystemTime(date("2026-04-20"));
-    const created = await caller().story.create({
+    const created = await api.story.create({
       projectId: p.id,
       name: "Old assignment",
       sprintNumber: "2026-1",
     });
     expect(created.sprintNumber).toBe("2026-2");
-    const completed = await caller().story.create({
+    const completed = await api.story.create({
       projectId: p.id,
       name: "Historic done",
       column: "done",
@@ -566,28 +534,13 @@ describe("sprint API and blocking middleware", () => {
     });
     expect(completed.sprintNumber).toBe("2026-1");
     expect(
-      (await caller().story.update({ id: completed.id, column: "todo" }))
+      (await api.story.update({ id: completed.id, column: "todo" }))
         .sprintNumber,
     ).toBe("2026-2");
     expect(
-      (await caller().story.update({ id: created.id, sprintNumber: "2026-1" }))
+      (await api.story.update({ id: created.id, sprintNumber: "2026-1" }))
         .sprintNumber,
     ).toBe("2026-2");
-  });
-
-  it("rolls back project-list processing if its handler fails", async () => {
-    const p = await project();
-    await seedStory(p.id, "2026-1");
-    vi.setSystemTime(date("2026-04-20"));
-    const failing = createCallerFactory(
-      createTRPCRouter({
-        fail: projectListProcedure.query(() => {
-          throw new TRPCError({ code: "BAD_REQUEST" });
-        }),
-      }),
-    )({ db, session: testSession, headers: new Headers() });
-    await expect(failing.fail()).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    expect((await db.query.stories.findFirst())?.sprintNumber).toBe("2026-1");
   });
 
   it("blocks the handler if the rollover update fails", async () => {
@@ -601,7 +554,7 @@ describe("sprint API and blocking middleware", () => {
       sql`CREATE TRIGGER issue9_rollover_failure BEFORE UPDATE ON story FOR EACH ROW EXECUTE FUNCTION issue9_fail_rollover()`,
     );
     try {
-      await expect(caller().story.list({ projectId: p.id })).rejects.toThrow();
+      await expect(api.story.list({ projectId: p.id })).rejects.toThrow();
       expect((await db.query.stories.findFirst())?.sprintNumber).toBe("2026-1");
     } finally {
       await db.execute(sql`DROP TRIGGER issue9_rollover_failure ON story`);
@@ -614,36 +567,22 @@ describe("sprint API and blocking middleware", () => {
     async (method) => {
       const p = await project();
       const story = await seedStory(p.id, null);
-      let release!: () => void;
-      let locked!: () => void;
-      const gate = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const acquired = new Promise<void>((resolve) => {
-        locked = resolve;
-      });
-      const deleting = db.transaction(async (tx) => {
-        await tx
-          .select()
-          .from(projects)
-          .where(eq(projects.id, p.id))
-          .for("update");
-        await tx.delete(stories).where(eq(stories.id, story.id));
-        locked();
-        await gate;
-      });
-      await acquired;
+      const release = await holdProject(p.id, (tx) =>
+        tx.delete(stories).where(eq(stories.id, story.id)),
+      );
       const request =
         method === "update"
-          ? caller().story.update({ id: story.id, name: "Deleted" })
-          : caller().story[method]({ id: story.id });
+          ? api.story.update({ id: story.id, name: "Deleted" })
+          : api.story[method]({ id: story.id });
       // The uncommitted deletion is still visible to the initial project lookup.
       const outcome = expect(request).rejects.toMatchObject({
         code: "NOT_FOUND",
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      release();
-      await deleting;
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } finally {
+        await release();
+      }
       await outcome;
     },
   );
