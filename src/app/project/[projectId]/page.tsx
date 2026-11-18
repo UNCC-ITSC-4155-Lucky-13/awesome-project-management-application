@@ -1,12 +1,9 @@
-import { Typography } from "@/app/_components/typography";
+"use client";
 
-export default function Page() {
-  return (
-    <div className="space-y-3">
-      <Typography variant="h1">Board</Typography>
-      <Typography variant="subtitle">
-        Your project issues will appear here.
-      </Typography>
-    </div>
-  );
+import { useParams } from "next/navigation";
+import { DefaultViewRedirect } from "@/app/_components/DefaultViewRedirect";
+
+export default function ProjectPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  return <DefaultViewRedirect projectId={projectId} viewName="Board" />;
 }

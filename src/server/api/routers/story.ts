@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
@@ -80,11 +80,16 @@ export const storyRouter = createTRPCRouter({
     }),
 
   getById: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const story = await ctx.db.query.stories.findFirst({
         where: eq(stories.id, input.id),
-        with: { assignees: true },
+        with: { assignees: { with: { user: true } } },
       });
 
       if (!story) throw new TRPCError({ code: "NOT_FOUND" });
@@ -93,6 +98,9 @@ export const storyRouter = createTRPCRouter({
         story.projectId,
         ctx.session.user.id,
       );
+      if (input.projectId && input.projectId !== story.projectId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
 
       return story;
     }),
@@ -195,9 +203,10 @@ export const storyRouter = createTRPCRouter({
       z.object({
         projectId: z.string().uuid(),
         sprintNumber: z.string().optional(),
-        assigneeId: z.string().optional(),
+        assigneeId: z.string().nullable().optional(),
         column: z.string().optional(),
         sort: z.enum(["createdAt", "lastMovedAt", "storyPoints"]).optional(),
+        sortDirection: z.enum(["asc", "desc"]).optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -220,7 +229,16 @@ export const storyRouter = createTRPCRouter({
       }
 
       // Add assignee filter using a subquery
-      if (input.assigneeId) {
+      if (input.assigneeId === null) {
+        const assignedStoryIds = ctx.db
+          .select({ id: storyAssignees.storyId })
+          .from(storyAssignees);
+
+        whereClause = and(
+          whereClause,
+          notInArray(stories.id, assignedStoryIds),
+        )!;
+      } else if (input.assigneeId) {
         const assignedStoryIds = ctx.db
           .select({ id: storyAssignees.storyId })
           .from(storyAssignees)
@@ -230,15 +248,17 @@ export const storyRouter = createTRPCRouter({
       }
 
       // Determine sorting
-      let orderBy;
-      if (input.sort === "lastMovedAt") orderBy = desc(stories.lastMovedAt);
-      else if (input.sort === "storyPoints")
-        orderBy = desc(stories.storyPoints);
-      else orderBy = desc(stories.createdAt); // default
+      const direction = input.sortDirection === "asc" ? asc : desc;
+      const orderBy =
+        input.sort === "lastMovedAt"
+          ? direction(stories.lastMovedAt)
+          : input.sort === "storyPoints"
+            ? direction(stories.storyPoints)
+            : direction(stories.createdAt);
 
       return await ctx.db.query.stories.findMany({
         where: whereClause,
-        with: { assignees: true },
+        with: { assignees: { with: { user: true } } },
         orderBy,
       });
     }),

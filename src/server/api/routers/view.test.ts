@@ -460,7 +460,13 @@ describe("viewRouter", () => {
         configuration: {
           columns: ["todo", "done"],
           groupBy: "status",
-          sort: { field: "lastMovedAt", direction: "desc" },
+          rowSplit: "assignee",
+          filters: {
+            sprintNumber: "2026-1",
+            assigneeId: null,
+            column: "todo",
+          },
+          sort: { field: "lastMovedAt", direction: "asc" },
         },
       });
 
@@ -469,7 +475,13 @@ describe("viewRouter", () => {
       expect(updated.configuration).toEqual({
         columns: ["todo", "done"],
         groupBy: "status",
-        sort: { field: "lastMovedAt", direction: "desc" },
+        rowSplit: "assignee",
+        filters: {
+          sprintNumber: "2026-1",
+          assigneeId: null,
+          column: "todo",
+        },
+        sort: { field: "lastMovedAt", direction: "asc" },
       });
       expect(updated.ownerUserId).toBe("member-user");
     });
