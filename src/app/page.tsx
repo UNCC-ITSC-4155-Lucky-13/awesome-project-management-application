@@ -11,8 +11,7 @@ export default function Home() {
         A shared place to organize your team&apos;s work and keep projects
         moving.
       </Typography>
-      {/* Temporary destination until project selection is connected. */}
-      <Button nativeButton={false} render={<Link href="/project/demo" />}>
+      <Button nativeButton={false} render={<Link href="/projects" />}>
         Get started <ArrowRightIcon />
       </Button>
     </main>
