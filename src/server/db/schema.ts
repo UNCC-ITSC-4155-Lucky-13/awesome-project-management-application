@@ -243,6 +243,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
     fields: [user.id],
     references: [userPreferences.userId],
   }),
+  views: many(views),
 }));
 
 export const userPreferencesRelations = relations(
@@ -259,6 +260,8 @@ export const userPreferencesRelations = relations(
 export const projectsRelations = relations(projects, ({ many }) => ({
   members: many(projectMembers), //
   invites: many(projectInvites),
+  views: many(views),
+  stories: many(stories),
 }));
 
 /**
@@ -374,4 +377,79 @@ export const storyAssigneesRelations = relations(storyAssignees, ({ one }) => ({
     references: [stories.id],
   }),
   user: one(user, { fields: [storyAssignees.userId], references: [user.id] }),
+}));
+
+export type ViewIssueField = "status" | "assignee" | "sprint";
+
+export type ViewSortField = "createdAt" | "lastMovedAt" | "storyPoints";
+
+export type ViewSort =
+  | ViewSortField
+  | {
+      field: ViewSortField;
+      direction?: "asc" | "desc";
+    };
+
+export type ViewFilters = {
+  sprintNumber?: string | null;
+  assigneeId?: string | null;
+  column?: string | null;
+  status?: string | null;
+};
+
+export type ViewConfiguration = {
+  columns?: string[];
+  groupBy?: ViewIssueField;
+  rowGroup?: ViewIssueField | null;
+  rowSplit?: ViewIssueField | null;
+  grouping?: {
+    column?: ViewIssueField;
+    row?: ViewIssueField | null;
+  };
+  filters?: ViewFilters;
+  sort?: ViewSort | null;
+};
+
+/**
+ * Saved configurable views for a project (e.g. board, by-person, custom views).
+ *
+ * ownerUserId === null means Workspace View; a user ID means that user's My View.
+ */
+export const views = pgTable(
+  "views",
+  (d) => ({
+    id: d.uuid().primaryKey().defaultRandom(),
+    projectId: d
+      .uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    // ownerUserId === null means Workspace View; a user ID means that user's My View.
+    ownerUserId: d.text().references(() => user.id, { onDelete: "cascade" }),
+    name: d.varchar({ length: 255 }).notNull(),
+    icon: d.varchar({ length: 50 }).notNull(),
+    configuration: d.jsonb().$type<ViewConfiguration>().notNull(),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updatedAt: d.timestamp({ withTimezone: true }).$onUpdate(() => new Date()),
+  }),
+  (t) => [
+    index("views_project_idx").on(t.projectId),
+    index("views_owner_user_idx").on(t.ownerUserId),
+  ],
+);
+
+/**
+ * Relations for the views table.
+ */
+export const viewsRelations = relations(views, ({ one }) => ({
+  project: one(projects, {
+    fields: [views.projectId],
+    references: [projects.id],
+  }),
+  owner: one(user, {
+    fields: [views.ownerUserId],
+    references: [user.id],
+  }),
 }));
