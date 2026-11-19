@@ -72,14 +72,15 @@ export function InviteSection({ projectId }: { projectId: string }) {
     sendInvite.mutate(
       { projectId, githubUsername: parsed.value },
       {
-        onSuccess: async (invite) => {
+        // Per-call callbacks must return void, so the refresh isn't awaited.
+        onSuccess: (invite) => {
           setUsername("");
           setSent({
             username: invite.githubUsername,
             renewed,
             expiresAt: invite.expiresAt,
           });
-          await utils.invite.listProject.invalidate({ projectId });
+          void utils.invite.listProject.invalidate({ projectId });
         },
       },
     );
