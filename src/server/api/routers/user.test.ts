@@ -8,6 +8,14 @@ import {
 } from "../../../../tests/helpers/trpc";
 
 describe("userRouter", () => {
+  it("returns the authenticated user's profile", async () => {
+    await expect(createTestCaller().user.me()).resolves.toEqual({
+      id: testSession.user.id,
+      name: testSession.user.name,
+      image: testSession.user.image,
+    });
+  });
+
   it("creates and returns system preferences on the first read", async () => {
     await expect(createTestCaller().user.getPreferences()).resolves.toEqual({
       theme: "system",
