@@ -40,7 +40,7 @@
     {
       "idx": 5,
       "version": "7",
-      "when": 1794270224144,
+      "when": 1793569183786,
       "tag": "0005_flat_spectrum",
       "breakpoints": true
     },
@@ -56,6 +56,13 @@
       "version": "7",
       "when": 1794902556134,
       "tag": "0007_sprint_schedule_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795032360049,
+      "tag": "0008_create_views_table",
       "breakpoints": true
     }
   ]

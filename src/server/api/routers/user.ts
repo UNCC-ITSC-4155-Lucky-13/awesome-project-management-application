@@ -11,6 +11,13 @@ const preferencesOutput = (
 });
 
 export const userRouter = createTRPCRouter({
+  /** Returns the currently authenticated user's basic profile. */
+  me: protectedProcedure.query(({ ctx }) => ({
+    id: ctx.session.user.id,
+    name: ctx.session.user.name,
+    image: ctx.session.user.image,
+  })),
+
   getPreferences: protectedProcedure.query(async ({ ctx }) => {
     const existingPreferences = await ctx.db.query.userPreferences.findFirst({
       where: eq(userPreferences.userId, ctx.session.user.id),
