@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
@@ -7,6 +7,7 @@ import type { db } from "@/server/db";
 import { projectMembers, user } from "@/server/db/schema";
 
 type Database = typeof db;
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 const memberInput = z.object({
   projectId: z.string().uuid(),
@@ -70,6 +71,41 @@ async function requireTarget(
   }
 }
 
+// Locks the project's owner and admin rows until the transaction ends, so
+// concurrent removals and demotions run one at a time, then rejects the change
+// if it would leave the project without anyone able to manage it.
+async function requireAnotherManager(
+  tx: Transaction,
+  projectId: string,
+  userId: string,
+) {
+  const managers = await tx
+    .select({ userId: projectMembers.userId })
+    .from(projectMembers)
+    .where(
+      and(
+        eq(projectMembers.projectId, projectId),
+        inArray(projectMembers.role, ["owner", "admin"]),
+      ),
+    )
+    // A consistent order keeps concurrent requests from deadlocking.
+    .orderBy(projectMembers.userId)
+    .for("update");
+
+  const isManager = managers.some((manager) => manager.userId === userId);
+  const hasAnotherManager = managers.some(
+    (manager) => manager.userId !== userId,
+  );
+
+  if (isManager && !hasAnotherManager) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message:
+        "A project needs at least one owner or admin. Appoint another owner or admin first.",
+    });
+  }
+}
+
 export const memberRouter = createTRPCRouter({
   list: protectedProcedure
     .input(z.object({ projectId: z.string().uuid() }))
@@ -96,13 +132,20 @@ export const memberRouter = createTRPCRouter({
       await requireManager(ctx.db, input.projectId, ctx.session.user.id);
       await requireTarget(ctx.db, input.projectId, input.userId);
 
-      const [updated] = await ctx.db
-        .update(projectMembers)
-        .set({ role: input.role })
-        .where(membershipWhere(input.projectId, input.userId))
-        .returning();
+      return ctx.db.transaction(async (tx) => {
+        // Only a demotion can leave the project without an owner or admin.
+        if (input.role === "member") {
+          await requireAnotherManager(tx, input.projectId, input.userId);
+        }
 
-      return updated!;
+        const [updated] = await tx
+          .update(projectMembers)
+          .set({ role: input.role })
+          .where(membershipWhere(input.projectId, input.userId))
+          .returning();
+
+        return updated!;
+      });
     }),
 
   remove: protectedProcedure
@@ -112,6 +155,7 @@ export const memberRouter = createTRPCRouter({
       await requireTarget(ctx.db, input.projectId, input.userId);
 
       await ctx.db.transaction(async (tx) => {
+        await requireAnotherManager(tx, input.projectId, input.userId);
         await tx
           .delete(projectMembers)
           .where(membershipWhere(input.projectId, input.userId));

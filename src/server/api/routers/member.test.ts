@@ -1,3 +1,4 @@
+import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { projectMembers, projects, user } from "@/server/db/schema";
@@ -10,6 +11,8 @@ import {
 const projectId = "00000000-0000-4000-8000-000000000001";
 const secondProjectId = "00000000-0000-4000-8000-000000000002";
 const now = new Date();
+const lastManagerMessage =
+  "A project needs at least one owner or admin. Appoint another owner or admin first.";
 
 type Role = "owner" | "admin" | "member";
 
@@ -49,6 +52,29 @@ async function findMembership(project: string, userId: string) {
     where: (members, { and, eq }) =>
       and(eq(members.projectId, project), eq(members.userId, userId)),
   });
+}
+
+async function setRole(userId: string, role: Role) {
+  await db
+    .update(projectMembers)
+    .set({ role })
+    .where(
+      and(
+        eq(projectMembers.projectId, projectId),
+        eq(projectMembers.userId, userId),
+      ),
+    );
+}
+
+async function managerIds() {
+  const managers = await db.query.projectMembers.findMany({
+    where: (members, { and, inArray }) =>
+      and(
+        eq(members.projectId, projectId),
+        inArray(members.role, ["owner", "admin"]),
+      ),
+  });
+  return managers.map((manager) => manager.userId);
 }
 
 describe("memberRouter", () => {
@@ -249,6 +275,101 @@ describe("memberRouter", () => {
         { role: "member" },
       );
     });
+
+    describe("last owner or admin", () => {
+      it("rejects demoting the last owner", async () => {
+        await setRole("admin-user", "member");
+
+        await expect(
+          createTestCaller().member.updateRole({
+            projectId,
+            userId: testSession.user.id,
+            role: "member",
+          }),
+        ).rejects.toMatchObject({
+          code: "PRECONDITION_FAILED",
+          message: lastManagerMessage,
+        });
+        expect(
+          await findMembership(projectId, testSession.user.id),
+        ).toMatchObject({ role: "owner" });
+      });
+
+      it("rejects demoting the last admin", async () => {
+        await setRole(testSession.user.id, "member");
+
+        await expect(
+          callerFor("admin-user", "Admin User").member.updateRole({
+            projectId,
+            userId: "admin-user",
+            role: "member",
+          }),
+        ).rejects.toMatchObject({
+          code: "PRECONDITION_FAILED",
+          message: lastManagerMessage,
+        });
+        expect(await findMembership(projectId, "admin-user")).toMatchObject({
+          role: "admin",
+        });
+        expect(await db.query.projectMembers.findMany()).toHaveLength(3);
+      });
+
+      it("allows demoting an owner or admin when another remains", async () => {
+        await createTestCaller().member.updateRole({
+          projectId,
+          userId: "admin-user",
+          role: "member",
+        });
+        expect(await findMembership(projectId, "admin-user")).toMatchObject({
+          role: "member",
+        });
+
+        await setRole("admin-user", "admin");
+        await createTestCaller().member.updateRole({
+          projectId,
+          userId: testSession.user.id,
+          role: "member",
+        });
+        expect(
+          await findMembership(projectId, testSession.user.id),
+        ).toMatchObject({ role: "member" });
+      });
+
+      it("allows changing the last manager's role to another manager role", async () => {
+        await setRole("admin-user", "member");
+
+        await createTestCaller().member.updateRole({
+          projectId,
+          userId: testSession.user.id,
+          role: "admin",
+        });
+
+        expect(
+          await findMembership(projectId, testSession.user.id),
+        ).toMatchObject({ role: "admin" });
+      });
+
+      it("lets only one of two managers demote the other at the same time", async () => {
+        const results = await Promise.allSettled([
+          createTestCaller().member.updateRole({
+            projectId,
+            userId: "admin-user",
+            role: "member",
+          }),
+          callerFor("admin-user", "Admin User").member.updateRole({
+            projectId,
+            userId: testSession.user.id,
+            role: "member",
+          }),
+        ]);
+
+        expect(results.map((result) => result.status).sort()).toEqual([
+          "fulfilled",
+          "rejected",
+        ]);
+        expect(await managerIds()).toHaveLength(1);
+      });
+    });
   });
 
   describe("remove", () => {
@@ -332,6 +453,86 @@ describe("memberRouter", () => {
       expect(await findMembership(secondProjectId, "other-user")).toMatchObject(
         { role: "member" },
       );
+    });
+
+    describe("last owner or admin", () => {
+      it("rejects removing the last owner", async () => {
+        await setRole("admin-user", "member");
+
+        await expect(
+          createTestCaller().member.remove({
+            projectId,
+            userId: testSession.user.id,
+          }),
+        ).rejects.toMatchObject({
+          code: "PRECONDITION_FAILED",
+          message: lastManagerMessage,
+        });
+        expect(await db.query.projectMembers.findMany()).toHaveLength(3);
+      });
+
+      it("rejects removing the last admin", async () => {
+        await setRole(testSession.user.id, "member");
+
+        await expect(
+          callerFor("admin-user", "Admin User").member.remove({
+            projectId,
+            userId: "admin-user",
+          }),
+        ).rejects.toMatchObject({
+          code: "PRECONDITION_FAILED",
+          message: lastManagerMessage,
+        });
+        expect(await db.query.projectMembers.findMany()).toHaveLength(3);
+      });
+
+      it("allows removing an owner or admin when another remains", async () => {
+        await createTestCaller().member.remove({
+          projectId,
+          userId: "admin-user",
+        });
+        expect(await findMembership(projectId, "admin-user")).toBeUndefined();
+
+        await addMember(projectId, "outsider", "admin");
+        await createTestCaller().member.remove({
+          projectId,
+          userId: testSession.user.id,
+        });
+        expect(
+          await findMembership(projectId, testSession.user.id),
+        ).toBeUndefined();
+      });
+
+      it("allows removing a member when only one manager remains", async () => {
+        await setRole("admin-user", "member");
+
+        await createTestCaller().member.remove({
+          projectId,
+          userId: "member-user",
+        });
+
+        expect(await findMembership(projectId, "member-user")).toBeUndefined();
+        expect(await managerIds()).toEqual([testSession.user.id]);
+      });
+
+      it("lets only one of two managers remove the other at the same time", async () => {
+        const results = await Promise.allSettled([
+          createTestCaller().member.remove({
+            projectId,
+            userId: "admin-user",
+          }),
+          callerFor("admin-user", "Admin User").member.remove({
+            projectId,
+            userId: testSession.user.id,
+          }),
+        ]);
+
+        expect(results.map((result) => result.status).sort()).toEqual([
+          "fulfilled",
+          "rejected",
+        ]);
+        expect(await managerIds()).toHaveLength(1);
+      });
     });
   });
 });
