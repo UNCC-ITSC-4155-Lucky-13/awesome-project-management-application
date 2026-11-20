@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { ViewIcon } from "@/app/_components/ViewIcon";
+import { NavUser } from "./nav-user";
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -311,7 +312,9 @@ export function AppSidebar() {
           </nav>
         </SidebarContent>
 
-        <SidebarFooter className="min-h-16" />
+        <SidebarFooter className="min-h-16">
+          <NavUser />
+        </SidebarFooter>
       </Sidebar>
 
       {/* ── Create View Dialog ──────────────────────────────────────────── */}

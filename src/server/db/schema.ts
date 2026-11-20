@@ -172,6 +172,28 @@ export const projects = pgTable("project", (d) => ({
 }));
 
 /**
+ * Once a schedule change takes effect, keep it unchanged so past sprint dates stay the same.
+ * A null duration records when sprints were disabled.
+ */
+export const sprintScheduleChanges = pgTable(
+  "sprint_schedule_change",
+  (d) => ({
+    id: d.uuid().primaryKey().defaultRandom(),
+    projectId: d
+      .uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    startDate: d.timestamp({ withTimezone: true }).notNull(),
+    durationWeeks: d.integer(),
+    // The last old sprint is cut/extended to this change's startDate.
+    previousSprintStartDate: d.timestamp({ withTimezone: true }),
+  }),
+  (t) => [
+    unique("sprint_schedule_project_start_unique").on(t.projectId, t.startDate),
+  ],
+);
+
+/**
  * Project members/roles
  */
 export const projectMembers = pgTable(
@@ -239,11 +261,11 @@ export const userRelations = relations(user, ({ many, one }) => ({
   account: many(account),
   session: many(session),
   projectMembers: many(projectMembers),
+  views: many(views),
   preferences: one(userPreferences, {
     fields: [user.id],
     references: [userPreferences.userId],
   }),
-  views: many(views),
 }));
 
 export const userPreferencesRelations = relations(
@@ -261,7 +283,6 @@ export const projectsRelations = relations(projects, ({ many }) => ({
   members: many(projectMembers), //
   invites: many(projectInvites),
   views: many(views),
-  stories: many(stories),
 }));
 
 /**
@@ -369,6 +390,7 @@ export const storiesRelations = relations(stories, ({ one, many }) => ({
   }),
   creator: one(user, { fields: [stories.creatorId], references: [user.id] }),
   assignees: many(storyAssignees),
+  comments: many(comments),
 }));
 
 export const storyAssigneesRelations = relations(storyAssignees, ({ one }) => ({
@@ -377,6 +399,38 @@ export const storyAssigneesRelations = relations(storyAssignees, ({ one }) => ({
     references: [stories.id],
   }),
   user: one(user, { fields: [storyAssignees.userId], references: [user.id] }),
+}));
+
+/**
+ * Comments on a story. Deleting a story or a user deletes their comments.
+ * `editedAt` stays null until the content is edited.
+ */
+export const comments = pgTable(
+  "comment",
+  (d) => ({
+    id: d.uuid().primaryKey().defaultRandom(),
+    storyId: d
+      .uuid()
+      .notNull()
+      .references(() => stories.id, { onDelete: "cascade" }),
+    createdBy: d
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    content: d.text().notNull(),
+    createdAt: d
+      .timestamp({ withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    editedAt: d.timestamp({ withTimezone: true }),
+  }),
+  (t) => [index("comment_story_idx").on(t.storyId)],
+);
+
+/** Relations for the comments table. */
+export const commentsRelations = relations(comments, ({ one }) => ({
+  story: one(stories, { fields: [comments.storyId], references: [stories.id] }),
+  author: one(user, { fields: [comments.createdBy], references: [user.id] }),
 }));
 
 export type ViewIssueField = "status" | "assignee" | "sprint";
@@ -423,7 +477,6 @@ export const views = pgTable(
       .uuid()
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    // ownerUserId === null means Workspace View; a user ID means that user's My View.
     ownerUserId: d.text().references(() => user.id, { onDelete: "cascade" }),
     name: d.varchar({ length: 255 }).notNull(),
     icon: d.varchar({ length: 50 }).notNull(),
@@ -440,9 +493,7 @@ export const views = pgTable(
   ],
 );
 
-/**
- * Relations for the views table.
- */
+/** Relations for the views table. */
 export const viewsRelations = relations(views, ({ one }) => ({
   project: one(projects, {
     fields: [views.projectId],

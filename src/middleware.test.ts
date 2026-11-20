@@ -24,6 +24,7 @@ describe("protected route matcher", () => {
     "/project/demo/settings/project",
     "/project/demo/settings/members",
     "/project/demo.foo/settings/members",
+    "/projects",
   ])("protects %s", (pathname) => {
     expect(
       unstable_doesMiddlewareMatch({
@@ -41,7 +42,7 @@ describe("protected route matcher", () => {
     "/api/trpc/post.getLatest",
     "/_next/static/chunk.js",
     "/favicon.ico",
-    "/projects/demo",
+    "/projectsdfs",
     "/project-other",
     "/dashboard",
   ])("does not intercept %s", (pathname) => {

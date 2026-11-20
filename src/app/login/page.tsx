@@ -15,7 +15,7 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
   const { callbackUrl } = await searchParams;
-  const destination = safeCallbackPath(callbackUrl);
+  const destination = callbackUrl ? safeCallbackPath(callbackUrl) : "/projects";
 
   // A signed-in user with no projects goes to onboarding before any other
   // destination. GitHub sign-in returns here, so this covers that flow too.

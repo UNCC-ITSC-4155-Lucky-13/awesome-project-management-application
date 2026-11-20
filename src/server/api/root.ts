@@ -5,6 +5,8 @@ import { projectRouter } from "@/server/api/routers/project";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 import { storyRouter } from "./routers/story";
 import { memberRouter } from "@/server/api/routers/member";
+import { commentRouter } from "@/server/api/routers/comment";
+import { sprintRouter } from "@/server/api/routers/sprint";
 import { viewRouter } from "@/server/api/routers/view";
 
 /**
@@ -19,6 +21,8 @@ export const appRouter = createTRPCRouter({
   project: projectRouter,
   story: storyRouter,
   member: memberRouter,
+  comment: commentRouter,
+  sprint: sprintRouter,
   view: viewRouter,
 });
 

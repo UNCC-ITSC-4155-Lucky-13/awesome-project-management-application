@@ -4,6 +4,7 @@ import { type Metadata } from "next";
 import { Geist, Inter } from "next/font/google";
 
 import { Toaster } from "@/components/ui/toast";
+import { ThemeProvider } from "@/app/_components/theme-provider";
 import { cn } from "@/lib/utils";
 import { TRPCReactProvider } from "@/trpc/react";
 
@@ -26,13 +27,15 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn(geist.variable, "dark", "font-sans", inter.variable)}
+      className={cn(geist.variable, "font-sans", inter.variable)}
       suppressHydrationWarning
     >
       <body suppressHydrationWarning>
         <TRPCReactProvider>
-          <Toaster />
-          {children}
+          <ThemeProvider>
+            <Toaster />
+            {children}
+          </ThemeProvider>
         </TRPCReactProvider>
       </body>
     </html>
