@@ -59,7 +59,10 @@ async function setRole(userId: string, role: Role) {
     .update(projectMembers)
     .set({ role })
     .where(
-      and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId)),
+      and(
+        eq(projectMembers.projectId, projectId),
+        eq(projectMembers.userId, userId),
+      ),
     );
 }
 
