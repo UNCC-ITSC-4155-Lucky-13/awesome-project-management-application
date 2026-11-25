@@ -5,11 +5,8 @@ import { api } from "@/trpc/react";
 import { Spinner } from "@/components/ui/spinner";
 import { Typography } from "@/app/_components/typography";
 import { BoardLayout } from "@/app/_components/BoardLayout";
-import {
-  IssueCard,
-  type StoryWithAssignees,
-} from "@/app/_components/IssueCard";
-import { getSprintWindow } from "@/app/_components/sprint-utils";
+import { IssueCard } from "@/app/_components/issue-card";
+import type { RouterOutputs } from "@/trpc/react";
 import type { ViewConfiguration, ViewIssueField } from "@/server/db/schema";
 
 const DEFAULT_COLUMNS = ["backlog", "todo", "in_progress", "done"];
@@ -24,7 +21,9 @@ function columnLabel(key: string) {
   return COLUMN_LABELS[key] ?? key;
 }
 
-function assigneeKey(story: StoryWithAssignees) {
+type Story = RouterOutputs["story"]["list"][number];
+
+function assigneeKey(story: Story) {
   if (story.assignees.length === 0) return "__none__";
   return story.assignees
     .map((assignee) => assignee.userId)
@@ -32,7 +31,7 @@ function assigneeKey(story: StoryWithAssignees) {
     .join(",");
 }
 
-function assigneeLabel(story: StoryWithAssignees) {
+function assigneeLabel(story: Story) {
   if (story.assignees.length === 0) return "No assignee";
   return [...story.assignees]
     .sort((a, b) => a.userId.localeCompare(b.userId))
@@ -40,17 +39,13 @@ function assigneeLabel(story: StoryWithAssignees) {
     .join(", ");
 }
 
-function dimensionKey(story: StoryWithAssignees, field: ViewIssueField) {
+function dimensionKey(story: Story, field: ViewIssueField) {
   if (field === "assignee") return assigneeKey(story);
   if (field === "sprint") return story.sprintNumber ?? "__unscheduled__";
   return story.column;
 }
 
-function dimensionLabel(
-  story: StoryWithAssignees,
-  field: ViewIssueField,
-  key: string,
-) {
+function dimensionLabel(story: Story, field: ViewIssueField, key: string) {
   if (field === "assignee") return assigneeLabel(story);
   if (field === "sprint") {
     return key === "__unscheduled__" ? "No sprint" : key;
@@ -96,7 +91,11 @@ export function ViewRenderer({
   const { data: members = [], error: membersError } = api.member.list.useQuery({
     projectId,
   });
-  const projectQuery = api.project.getById.useQuery({ projectId });
+  const {
+    data: sprints = [],
+    isLoading: sprintsLoading,
+    error: sprintsError,
+  } = api.sprint.listSprints.useQuery({ projectId });
 
   const storyList = useMemo(() => stories ?? [], [stories]);
   const grouping =
@@ -161,13 +160,10 @@ export function ViewRenderer({
         ...storyList.flatMap((story) =>
           story.sprintNumber ? [story.sprintNumber] : [],
         ),
-        ...getSprintWindow(
-          projectQuery.data?.sprintStartDate ?? null,
-          projectQuery.data?.sprintDuration ?? 2,
-        ),
+        ...sprints.map((sprint) => sprint.sprintNumber),
       ]),
     ],
-    [projectQuery.data, storyList],
+    [sprints, storyList],
   );
 
   const renderCell = useCallback(
@@ -193,32 +189,23 @@ export function ViewRenderer({
       return cell.map((story) => (
         <IssueCard
           key={story.id}
-          story={story}
-          projectId={projectId}
+          issue={story}
           statusColumns={statusColumns}
           members={members}
           sprintOptions={sprintOptions}
         />
       ));
     },
-    [
-      grouping,
-      members,
-      projectId,
-      rowSplit,
-      sprintOptions,
-      statusColumns,
-      storyList,
-    ],
+    [grouping, members, rowSplit, sprintOptions, statusColumns, storyList],
   );
 
-  if (isLoading || projectQuery.isLoading) {
+  if (isLoading || sprintsLoading) {
     return <Spinner className="mx-auto my-8" />;
   }
 
-  if (error || membersError || projectQuery.error) {
+  if (error || membersError || sprintsError) {
     const message =
-      error?.message ?? membersError?.message ?? projectQuery.error?.message;
+      error?.message ?? membersError?.message ?? sprintsError?.message;
     return (
       <div
         className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border p-4"
