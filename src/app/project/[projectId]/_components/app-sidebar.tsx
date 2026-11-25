@@ -27,7 +27,7 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { ProjectSwitcher } from "./project-switcher";
 import { api } from "@/trpc/react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -62,17 +62,21 @@ export function AppSidebar() {
   const createMutation = api.view.create.useMutation({
     onSuccess: (view) => {
       void utils.view.list.invalidate({ projectId });
-      toast.success("View created");
+      toast.add({ type: "success", title: "View created" });
       setCreateOpen(false);
       setNewName("");
       router.push(`${projectPath}/views/${view.id}`);
     },
-    onError: (err) => toast.error(err.message ?? "Failed to create view"),
+    onError: (err) =>
+      toast.add({
+        type: "error",
+        title: err.message ?? "Failed to create view",
+      }),
   });
 
   const handleCreateView = () => {
     if (!newName.trim()) {
-      toast.error("View name cannot be empty");
+      toast.add({ type: "error", title: "View name cannot be empty" });
       return;
     }
     createMutation.mutate({
@@ -147,8 +151,9 @@ export function AppSidebar() {
     workspaceViews[0];
 
   useEffect(() => {
-    if (membershipError) toast.error(membershipError.message);
-    if (viewsError) toast.error(viewsError.message);
+    if (membershipError)
+      toast.add({ type: "error", title: membershipError.message });
+    if (viewsError) toast.add({ type: "error", title: viewsError.message });
   }, [membershipError, viewsError]);
 
   const openCreateView = (scope: "personal" | "workspace") => {

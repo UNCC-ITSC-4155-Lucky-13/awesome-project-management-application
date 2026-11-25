@@ -7,7 +7,7 @@ import { ViewHeader } from "@/app/_components/ViewHeader";
 import { ViewRenderer } from "@/app/_components/ViewRenderer";
 import { Spinner } from "@/components/ui/spinner";
 import { Typography } from "@/app/_components/typography";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/components/ui/toast";
 
 export default function ViewPage() {
   const { projectId, viewId } = useParams<{
@@ -24,7 +24,7 @@ export default function ViewPage() {
 
   // Show toast when the query errors
   useEffect(() => {
-    if (viewError) toast.error(viewError.message);
+    if (viewError) toast.add({ type: "error", title: viewError.message });
   }, [viewError]);
 
   // If loading view definition, show spinner

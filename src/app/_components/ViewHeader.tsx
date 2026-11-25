@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { api } from "@/trpc/react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/components/ui/toast";
 import { Typography } from "@/app/_components/typography";
 import { ViewIcon, SUPPORTED_VIEW_ICON_KEYS } from "@/app/_components/ViewIcon";
 import type { ViewConfiguration, ViewIssueField } from "@/server/db/schema";
@@ -112,20 +112,20 @@ export function ViewHeader({
       setDraftScope(updated.ownerUserId === null ? "workspace" : "personal");
       void utils.view.getById.invalidate({ projectId, id: viewId });
       void utils.view.list.invalidate({ projectId });
-      toast.success("View updated");
+      toast.add({ type: "success", title: "View updated" });
       setEditing(false);
       if (searchParams.has("edit")) router.replace(pathname);
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => toast.add({ type: "error", title: error.message }),
   });
 
   const deleteMutation = api.view.delete.useMutation({
     onSuccess: () => {
       void utils.view.list.invalidate({ projectId });
-      toast.success("View deleted");
+      toast.add({ type: "success", title: "View deleted" });
       router.push(`/project/${encodeURIComponent(projectId)}`);
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => toast.add({ type: "error", title: error.message }),
   });
 
   const openEdit = () => {
@@ -142,14 +142,14 @@ export function ViewHeader({
 
   const handleUpdate = () => {
     if (!draftName.trim()) {
-      toast.error("View name cannot be empty");
+      toast.add({ type: "error", title: "View name cannot be empty" });
       return;
     }
     if (
       selectedGroup === "status" &&
       (draftConfiguration.columns?.length ?? 0) === 0
     ) {
-      toast.error("Select at least one status column");
+      toast.add({ type: "error", title: "Select at least one status column" });
       return;
     }
 
