@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { projectMembers, projects, user } from "@/server/db/schema";
+import { projectMembers, projects, user, views } from "@/server/db/schema";
 import {
   createTestCaller,
   db,
@@ -384,6 +384,47 @@ describe("memberRouter", () => {
           where: (users, { eq }) => eq(users.id, "member-user"),
         }),
       ).toMatchObject({ id: "member-user" });
+    });
+
+    it("cleans up the removed member's personal views in the project", async () => {
+      const [personalView] = await db
+        .insert(views)
+        .values({
+          projectId,
+          ownerUserId: "member-user",
+          name: "Personal View",
+          icon: "user",
+          configuration: {},
+        })
+        .returning();
+
+      const [workspaceView] = await db
+        .insert(views)
+        .values({
+          projectId,
+          ownerUserId: null,
+          name: "Workspace View",
+          icon: "layout-dashboard",
+          configuration: {},
+        })
+        .returning();
+
+      await createTestCaller().member.remove({
+        projectId,
+        userId: "member-user",
+      });
+
+      expect(
+        await db.query.views.findFirst({
+          where: (v, { eq }) => eq(v.id, personalView!.id),
+        }),
+      ).toBeUndefined();
+
+      expect(
+        await db.query.views.findFirst({
+          where: (v, { eq }) => eq(v.id, workspaceView!.id),
+        }),
+      ).toBeDefined();
     });
 
     it("lets an admin remove a member", async () => {

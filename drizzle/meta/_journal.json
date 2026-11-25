@@ -57,6 +57,13 @@
       "when": 1794902556134,
       "tag": "0007_sprint_schedule_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795032360049,
+      "tag": "0008-create-views-table",
+      "breakpoints": true
     }
   ]
 }

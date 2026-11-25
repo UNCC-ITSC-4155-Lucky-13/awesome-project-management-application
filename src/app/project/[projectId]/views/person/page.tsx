@@ -1,12 +1,9 @@
-import { Typography } from "@/app/_components/typography";
+"use client";
 
-export default function Page() {
-  return (
-    <div className="space-y-3">
-      <Typography variant="h1">By person</Typography>
-      <Typography variant="subtitle">
-        View project work grouped by person here.
-      </Typography>
-    </div>
-  );
+import { useParams } from "next/navigation";
+import { DefaultViewRedirect } from "@/app/_components/default-view-redirect";
+
+export default function PersonViewPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  return <DefaultViewRedirect projectId={projectId} viewName="By person" />;
 }

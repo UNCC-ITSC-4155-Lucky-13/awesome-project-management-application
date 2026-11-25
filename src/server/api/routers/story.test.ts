@@ -432,6 +432,33 @@ describe("storyRouter", () => {
       expect(list[0]?.name).toBe("Assigned");
     });
 
+    it("filters for unassigned stories when assigneeId is null", async () => {
+      const project = await setupProject();
+      await db.insert(user).values({
+        id: "user-unassigned-filter-25",
+        name: "Assigned User",
+        email: "assigned-filter-25@example.com",
+        emailVerified: true,
+      });
+
+      await createTestCaller().story.create({
+        projectId: project.id,
+        name: "Assigned",
+        assigneeIds: ["user-unassigned-filter-25"],
+      });
+      await createTestCaller().story.create({
+        projectId: project.id,
+        name: "Unassigned",
+      });
+
+      const list = await createTestCaller().story.list({
+        projectId: project.id,
+        assigneeId: null,
+      });
+
+      expect(list.map((story) => story.name)).toEqual(["Unassigned"]);
+    });
+
     it("includes assignee display details for issue cards", async () => {
       const project = await setupProject();
       await db.insert(user).values({
@@ -515,6 +542,28 @@ describe("storyRouter", () => {
       expect(list[1]?.name).toBe("Low");
     });
 
+    it("supports ascending sort direction", async () => {
+      const project = await setupProject();
+      await createTestCaller().story.create({
+        projectId: project.id,
+        name: "Low",
+        storyPoints: 1,
+      });
+      await createTestCaller().story.create({
+        projectId: project.id,
+        name: "High",
+        storyPoints: 10,
+      });
+
+      const list = await createTestCaller().story.list({
+        projectId: project.id,
+        sort: "storyPoints",
+        sortDirection: "asc",
+      });
+
+      expect(list.map((story) => story.name)).toEqual(["Low", "High"]);
+    });
+
     it("sorts by lastMovedAt instead of creation order", async () => {
       const project = await setupProject();
       await db.insert(stories).values([
@@ -573,6 +622,21 @@ describe("storyRouter", () => {
       const fetched = await createTestCaller().story.getById({ id: story.id });
       expect(fetched.name).toBe("Get Me");
       expect(fetched.assignees).toBeDefined();
+    });
+
+    it("hides stories requested under a different project route", async () => {
+      const project = await setupProject();
+      const story = await createTestCaller().story.create({
+        projectId: project.id,
+        name: "Scoped Issue",
+      });
+
+      await expect(
+        createTestCaller().story.getById({
+          id: story.id,
+          projectId: "00000000-0000-0000-0000-000000000000",
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
   });
 });

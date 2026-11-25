@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import type { db } from "@/server/db";
-import { projectMembers, user } from "@/server/db/schema";
+import { projectMembers, user, views } from "@/server/db/schema";
 
 type Database = typeof db;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -156,6 +156,15 @@ export const memberRouter = createTRPCRouter({
 
       await ctx.db.transaction(async (tx) => {
         await requireAnotherManager(tx, input.projectId, input.userId);
+        await tx
+          .delete(views)
+          .where(
+            and(
+              eq(views.projectId, input.projectId),
+              eq(views.ownerUserId, input.userId),
+            ),
+          );
+
         await tx
           .delete(projectMembers)
           .where(membershipWhere(input.projectId, input.userId));

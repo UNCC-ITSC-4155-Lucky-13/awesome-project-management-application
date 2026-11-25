@@ -10,14 +10,17 @@ export const projectMiddleware = createTRPCMiddleware(
   async ({ ctx, input, next }) => {
     const ids = input as { projectId?: string; id?: string } | undefined;
     let projectIds: string[];
-    if (ids?.projectId) {
-      projectIds = [ids.projectId];
-    } else if (ids?.id) {
+    if (ids?.id) {
       const story = await ctx.db.query.stories.findFirst({
         where: eq(stories.id, ids.id),
       });
       if (!story) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ids.projectId && ids.projectId !== story.projectId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
       projectIds = [story.projectId];
+    } else if (ids?.projectId) {
+      projectIds = [ids.projectId];
     } else {
       const memberships = await ctx.db.query.projectMembers.findMany({
         where: eq(projectMembers.userId, ctx.session!.user.id),

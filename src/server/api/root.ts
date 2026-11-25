@@ -7,6 +7,7 @@ import { storyRouter } from "./routers/story";
 import { memberRouter } from "@/server/api/routers/member";
 import { commentRouter } from "@/server/api/routers/comment";
 import { sprintRouter } from "@/server/api/routers/sprint";
+import { viewRouter } from "@/server/api/routers/view";
 
 /**
  * This is the primary router for your server.
@@ -22,6 +23,7 @@ export const appRouter = createTRPCRouter({
   member: memberRouter,
   comment: commentRouter,
   sprint: sprintRouter,
+  view: viewRouter,
 });
 
 // export type definition of API

@@ -17,6 +17,7 @@ import {
   getCurrentSprint,
   scheduleHorizon,
 } from "@/server/lib/sprints";
+import { ensureDefaultViews } from "@/server/lib/default-views";
 
 const projectInput = z.object({ projectId: z.string().uuid() });
 
@@ -66,6 +67,7 @@ export const projectRouter = createTRPCRouter({
           : [];
         if (changes.length)
           await transaction.insert(sprintScheduleChanges).values(changes);
+        await ensureDefaultViews(transaction, project!.id);
         const now = new Date();
         return {
           ...project!,
