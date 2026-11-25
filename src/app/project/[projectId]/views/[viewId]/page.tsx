@@ -43,7 +43,7 @@ export default function ViewPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div key={view.id} className="flex h-full flex-col">
       {/* Header with name/icon and edit/delete controls */}
       <ViewHeader
         viewId={view.id}
