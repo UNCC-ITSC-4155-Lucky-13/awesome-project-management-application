@@ -38,7 +38,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { ViewIcon } from "@/app/_components/ViewIcon";
+import { ViewIcon } from "@/app/_components/view-icon";
 import { NavUser } from "./nav-user";
 
 export function AppSidebar() {

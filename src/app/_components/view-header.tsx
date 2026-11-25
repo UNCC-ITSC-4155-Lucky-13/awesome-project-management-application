@@ -13,7 +13,10 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/trpc/react";
 import { toast } from "@/components/ui/toast";
 import { Typography } from "@/app/_components/typography";
-import { ViewIcon, SUPPORTED_VIEW_ICON_KEYS } from "@/app/_components/ViewIcon";
+import {
+  ViewIcon,
+  SUPPORTED_VIEW_ICON_KEYS,
+} from "@/app/_components/view-icon";
 import type { ViewConfiguration, ViewIssueField } from "@/server/db/schema";
 import { PencilIcon } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";

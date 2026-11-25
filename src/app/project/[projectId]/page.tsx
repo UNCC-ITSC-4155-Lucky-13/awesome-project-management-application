@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { DefaultViewRedirect } from "@/app/_components/DefaultViewRedirect";
+import { DefaultViewRedirect } from "@/app/_components/default-view-redirect";
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();

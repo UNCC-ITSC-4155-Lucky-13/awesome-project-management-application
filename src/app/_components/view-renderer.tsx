@@ -4,7 +4,7 @@ import { useCallback, useMemo } from "react";
 import { api } from "@/trpc/react";
 import { Spinner } from "@/components/ui/spinner";
 import { Typography } from "@/app/_components/typography";
-import { BoardLayout } from "@/app/_components/BoardLayout";
+import { BoardLayout } from "@/app/_components/board-layout";
 import { IssueCard } from "@/app/_components/issue-card";
 import type { RouterOutputs } from "@/trpc/react";
 import type { ViewConfiguration, ViewIssueField } from "@/server/db/schema";

@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/trpc/react";
-import { ViewHeader } from "@/app/_components/ViewHeader";
-import { ViewRenderer } from "@/app/_components/ViewRenderer";
+import { ViewHeader } from "@/app/_components/view-header";
+import { ViewRenderer } from "@/app/_components/view-renderer";
 import { Spinner } from "@/components/ui/spinner";
 import { Typography } from "@/app/_components/typography";
 import { toast } from "@/components/ui/toast";
