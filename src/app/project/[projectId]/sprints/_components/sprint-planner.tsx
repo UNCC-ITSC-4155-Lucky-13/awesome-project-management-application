@@ -67,59 +67,7 @@ function getPoints(issues: Story[]) {
   return issues.reduce((total, issue) => total + (issue.storyPoints ?? 0), 0);
 }
 
-function IssueMoveControl({
-  issue,
-  sprints,
-  onMove,
-  disabled,
-}: {
-  issue: Story;
-  sprints: Sprint[];
-  onMove: (sprintNumber: string | null) => void;
-  disabled: boolean;
-}) {
-  return (
-    <Select
-      value={issue.sprintNumber ?? "backlog"}
-      onValueChange={(value) => onMove(value === "backlog" ? null : value)}
-      disabled={disabled}
-    >
-      <SelectTrigger
-        size="sm"
-        className="w-full"
-        aria-label={`Move ${issue.name} to a sprint`}
-      >
-        <SelectValue>
-          {(value) => {
-            if (value === "backlog") return "Backlog";
-            if (typeof value !== "string") return "Unknown sprint";
-            return formatSprintLabel(value) ?? "Unknown sprint";
-          }}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="backlog">Backlog</SelectItem>
-        {sprints.map((sprint) => (
-          <SelectItem key={sprint.sprintNumber} value={sprint.sprintNumber}>
-            {formatSprintLabel(sprint.sprintNumber) ?? "Unknown sprint"}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function PlannerIssue({
-  issue,
-  sprints,
-  onMove,
-  moving,
-}: {
-  issue: Story;
-  sprints: Sprint[];
-  onMove: (sprintNumber: string | null) => void;
-  moving: boolean;
-}) {
+function PlannerIssue({ issue, moving }: { issue: Story; moving: boolean }) {
   const [dragging, setDragging] = useState(false);
 
   return (
@@ -131,19 +79,12 @@ function PlannerIssue({
         setDragging(true);
       }}
       onDragEnd={() => setDragging(false)}
-      className={dragging ? "opacity-50" : undefined}
+      className={`cursor-grab active:cursor-grabbing ${
+        dragging ? "opacity-50" : ""
+      }`}
     >
-      <div className="mb-2 flex items-center gap-2">
-        <GripVerticalIcon
-          aria-hidden="true"
-          className="text-muted-foreground size-4 shrink-0"
-        />
-        <IssueMoveControl
-          issue={issue}
-          sprints={sprints}
-          onMove={onMove}
-          disabled={moving}
-        />
+      <div className="mb-2 flex items-center gap-2" aria-hidden="true">
+        <GripVerticalIcon className="text-muted-foreground size-4 shrink-0" />
       </div>
       <IssueCard issue={issue} showSprint={false} />
     </div>
@@ -153,16 +94,12 @@ function PlannerIssue({
 function StatusColumn({
   label,
   issues,
-  sprints,
-  onMove,
   movingId,
   dropTarget,
   onDrop,
 }: {
   label: string;
   issues: Story[];
-  sprints: Sprint[];
-  onMove: (issue: Story, sprintNumber: string | null) => void;
   movingId: string | null;
   dropTarget: string | null;
   onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
@@ -190,8 +127,6 @@ function StatusColumn({
             <PlannerIssue
               key={issue.id}
               issue={issue}
-              sprints={sprints}
-              onMove={(sprintNumber) => onMove(issue, sprintNumber)}
               moving={movingId === issue.id}
             />
           ))
@@ -207,7 +142,6 @@ function SprintSection({
   sprint,
   issues,
   allIssues,
-  allSprints,
   current,
   past,
   movingId,
@@ -216,11 +150,10 @@ function SprintSection({
   sprint: Sprint;
   issues: Story[];
   allIssues: Story[];
-  allSprints: Sprint[];
   current: boolean;
   past: boolean;
   movingId: string | null;
-  onMove: (issue: Story, sprintNumber: string | null) => void;
+  onMove: (issue: Story, sprintNumber: string | null, column: string) => void;
 }) {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const label = formatSprintLabel(sprint.sprintNumber) ?? sprint.sprintNumber;
@@ -260,7 +193,7 @@ function SprintSection({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="[grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-4 pt-4">
+        <CardContent className="grid [grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-4 pt-4">
           {STATUS_COLUMNS.map((column) => {
             const columnIssues = issues.filter(
               (issue) => issue.column === column.value,
@@ -271,8 +204,6 @@ function SprintSection({
                 key={column.value}
                 label={column.label}
                 issues={columnIssues}
-                sprints={allSprints}
-                onMove={onMove}
                 movingId={movingId}
                 dropTarget={dropTarget === target ? target : null}
                 onDrop={(event) => {
@@ -280,7 +211,7 @@ function SprintSection({
                   const issueId = event.dataTransfer.getData("text/plain");
                   const issue = allIssues.find((item) => item.id === issueId);
                   setDropTarget(null);
-                  if (issue) onMove(issue, sprint.sprintNumber);
+                  if (issue) onMove(issue, sprint.sprintNumber, column.value);
                 }}
               />
             );
@@ -320,12 +251,16 @@ export function SprintPlanner() {
 
   const hiddenPastCount = sprints.filter(isPastSprint).length;
 
-  const moveIssue = async (issue: Story, sprintNumber: string | null) => {
-    if (issue.sprintNumber === sprintNumber) return;
+  const moveIssue = async (
+    issue: Story,
+    sprintNumber: string | null,
+    column = issue.column,
+  ) => {
+    if (issue.sprintNumber === sprintNumber && issue.column === column) return;
     setMovingId(issue.id);
     setMoveError(null);
     try {
-      await updateStory.mutateAsync({ id: issue.id, sprintNumber });
+      await updateStory.mutateAsync({ id: issue.id, sprintNumber, column });
       await Promise.all([
         utils.story.list.invalidate({ projectId }),
         utils.sprint.listSprints.invalidate(rangeInput),
@@ -513,8 +448,6 @@ export function SprintPlanner() {
                 <PlannerIssue
                   key={issue.id}
                   issue={issue}
-                  sprints={sprints}
-                  onMove={(sprintNumber) => void moveIssue(issue, sprintNumber)}
                   moving={movingId === issue.id}
                 />
               ))
@@ -585,12 +518,11 @@ export function SprintPlanner() {
                   sprint={sprint}
                   issues={getSprintIssues(issues, sprint.sprintNumber)}
                   allIssues={issues}
-                  allSprints={sprints}
                   current={sprint.sprintNumber === currentSprintNumber}
                   past={past}
                   movingId={movingId}
-                  onMove={(issue, sprintNumber) =>
-                    void moveIssue(issue, sprintNumber)
+                  onMove={(issue, sprintNumber, column) =>
+                    void moveIssue(issue, sprintNumber, column)
                   }
                 />
               </div>
