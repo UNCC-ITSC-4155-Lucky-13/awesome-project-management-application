@@ -41,13 +41,13 @@ export function IssueDetail({
         Back to board
       </Button>
 
-      {issue.isPending ? (
+      {!issue.data && issue.isPending ? (
         <div className="space-y-3" role="status" aria-label="Loading issue">
           <Skeleton className="h-6 w-24" />
           <Skeleton className="h-9 w-2/3" />
           <Skeleton className="h-4 w-full" />
         </div>
-      ) : issue.isError || wrongProject ? (
+      ) : !issue.data || wrongProject ? (
         <div role="alert" className="space-y-3">
           <Typography variant="h3" as="h1">
             {code === "FORBIDDEN"

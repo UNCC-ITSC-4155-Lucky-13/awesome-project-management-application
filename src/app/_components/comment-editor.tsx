@@ -116,10 +116,11 @@ export function CommentEditor({
         ref={textareaRef}
         value={draft}
         placeholder={placeholder}
-        disabled={pending}
+        readOnly={pending}
+        aria-busy={pending}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? messageId : undefined}
-        className="min-h-20 resize-y [overflow-wrap:anywhere]"
+        className="min-h-20 resize-y [overflow-wrap:anywhere] read-only:opacity-70"
         onChange={(event) => {
           setDraft(event.target.value);
           if (error) setError(undefined);

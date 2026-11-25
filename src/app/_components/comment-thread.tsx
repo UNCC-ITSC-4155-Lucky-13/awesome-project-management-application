@@ -109,15 +109,19 @@ export function CommentThread({ projectId, storyId }: CommentThreadProps) {
     try {
       await editComment.mutateAsync({ id: comment.id, content });
     } catch (error) {
-      if (isMembershipError(error)) void refreshAccess();
       if (isNotFoundError(error)) {
-        // Someone deleted it while we were editing.
         setEditingId(null);
         void refreshAfterChange();
+        toast.add({
+          type: "error",
+          title: "This comment was deleted",
+          description: "Your changes couldn't be saved.",
+        });
       }
+
       throw new Error(commentWriteErrorMessage("save", error));
     }
-    // Keep the editor (disabled) until the fresh text arrives, so the old
+    // Keep the editor (read-only) until the fresh text arrives, so the old
     // text never flashes back.
     await refreshAfterChange();
     restoreFocusTo.current = commentEditButtonId(comment.id);
