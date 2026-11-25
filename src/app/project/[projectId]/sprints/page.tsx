@@ -1,12 +1,5 @@
-import { Typography } from "@/app/_components/typography";
+import { SprintPlanner } from "./_components/sprint-planner";
 
 export default function Page() {
-  return (
-    <div className="space-y-3">
-      <Typography variant="h1">Sprint view</Typography>
-      <Typography variant="subtitle">
-        Plan and review project sprints here.
-      </Typography>
-    </div>
-  );
+  return <SprintPlanner />;
 }
