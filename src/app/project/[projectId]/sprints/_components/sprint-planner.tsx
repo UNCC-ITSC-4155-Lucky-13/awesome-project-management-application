@@ -2,6 +2,7 @@
 
 import {
   ChevronDownIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
   GripVerticalIcon,
   Loader2Icon,
@@ -88,13 +89,19 @@ function IssueMoveControl({
         className="w-full"
         aria-label={`Move ${issue.name} to a sprint`}
       >
-        <SelectValue />
+        <SelectValue>
+          {(value) => {
+            if (value === "backlog") return "Backlog";
+            if (typeof value !== "string") return "Unknown sprint";
+            return formatSprintLabel(value) ?? "Unknown sprint";
+          }}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="backlog">Backlog</SelectItem>
         {sprints.map((sprint) => (
           <SelectItem key={sprint.sprintNumber} value={sprint.sprintNumber}>
-            {formatSprintLabel(sprint.sprintNumber) ?? sprint.sprintNumber}
+            {formatSprintLabel(sprint.sprintNumber) ?? "Unknown sprint"}
           </SelectItem>
         ))}
       </SelectContent>
@@ -199,15 +206,19 @@ function StatusColumn({
 function SprintSection({
   sprint,
   issues,
+  allIssues,
   allSprints,
   current,
+  past,
   movingId,
   onMove,
 }: {
   sprint: Sprint;
   issues: Story[];
+  allIssues: Story[];
   allSprints: Sprint[];
   current: boolean;
+  past: boolean;
   movingId: string | null;
   onMove: (issue: Story, sprintNumber: string | null) => void;
 }) {
@@ -217,7 +228,7 @@ function SprintSection({
   return (
     <section
       aria-labelledby={`sprint-${sprint.sprintNumber}`}
-      className={current ? "scroll-mt-6" : "scroll-mt-6 opacity-75"}
+      className={past ? "scroll-mt-6 opacity-75" : "scroll-mt-6"}
     >
       {current && (
         <div className="text-primary mb-4 flex items-center gap-3">
@@ -249,7 +260,7 @@ function SprintSection({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 overflow-x-auto pt-4 md:grid-cols-2 xl:grid-cols-4">
+        <CardContent className="[grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-4 pt-4">
           {STATUS_COLUMNS.map((column) => {
             const columnIssues = issues.filter(
               (issue) => issue.column === column.value,
@@ -267,7 +278,7 @@ function SprintSection({
                 onDrop={(event) => {
                   event.preventDefault();
                   const issueId = event.dataTransfer.getData("text/plain");
-                  const issue = issues.find((item) => item.id === issueId);
+                  const issue = allIssues.find((item) => item.id === issueId);
                   setDropTarget(null);
                   if (issue) onMove(issue, sprint.sprintNumber);
                 }}
@@ -283,6 +294,7 @@ function SprintSection({
 export function SprintPlanner() {
   const { projectId } = useParams<{ projectId: string }>();
   const [range, setRange] = useState("3-6");
+  const [backlogCollapsed, setBacklogCollapsed] = useState(false);
   const [showPast, setShowPast] = useState(false);
   const [expandedPast, setExpandedPast] = useState<Set<string>>(new Set());
   const [movingId, setMovingId] = useState<string | null>(null);
@@ -397,7 +409,12 @@ export function SprintPlanner() {
             }}
           >
             <SelectTrigger id="sprint-range" size="sm">
-              <SelectValue />
+              <SelectValue>
+                {(value) =>
+                  RANGE_OPTIONS.find((option) => option.value === value)
+                    ?.label ?? "Select sprint range"
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {RANGE_OPTIONS.map((option) => (
@@ -419,10 +436,20 @@ export function SprintPlanner() {
         </div>
       )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <div
+        className={`grid items-start gap-6 ${
+          backlogCollapsed
+            ? "lg:grid-cols-[3rem_minmax(0,1fr)]"
+            : "lg:grid-cols-[18rem_minmax(0,1fr)]"
+        }`}
+      >
         <aside
           aria-label="Backlog"
-          className="space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
+          className={
+            backlogCollapsed
+              ? "flex justify-center"
+              : "space-y-3 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
+          }
           onDragOver={(event) => {
             event.preventDefault();
             event.dataTransfer.dropEffect = "move";
@@ -435,32 +462,64 @@ export function SprintPlanner() {
             if (issue) void moveIssue(issue, null);
           }}
         >
-          <div className="flex items-center justify-between">
-            <Typography variant="h3" as="h2">
-              Backlog
-            </Typography>
-            <Badge variant="secondary">{backlog.length}</Badge>
-          </div>
-          <Typography variant="caption">
-            Issues without a sprint, including assigned issues.
-          </Typography>
-          {backlog.length === 0 ? (
-            <Card>
-              <CardContent className="pt-6">
-                <Typography variant="caption">No backlog issues.</Typography>
-              </CardContent>
-            </Card>
-          ) : (
-            backlog.map((issue) => (
-              <PlannerIssue
-                key={issue.id}
-                issue={issue}
-                sprints={sprints}
-                onMove={(sprintNumber) => void moveIssue(issue, sprintNumber)}
-                moving={movingId === issue.id}
-              />
-            ))
+          {backlogCollapsed && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Expand backlog"
+              aria-controls="sprint-backlog-content"
+              aria-expanded={false}
+              onClick={() => setBacklogCollapsed(false)}
+            >
+              <ChevronRightIcon />
+            </Button>
           )}
+          <div
+            id="sprint-backlog-content"
+            hidden={backlogCollapsed}
+            className="space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <Typography variant="h3" as="h2">
+                Backlog
+              </Typography>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{backlog.length}</Badge>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Collapse backlog"
+                  aria-controls="sprint-backlog-content"
+                  aria-expanded
+                  onClick={() => setBacklogCollapsed(true)}
+                >
+                  <ChevronLeftIcon />
+                </Button>
+              </div>
+            </div>
+            <Typography variant="caption">
+              Issues without a sprint, including assigned issues.
+            </Typography>
+            {backlog.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <Typography variant="caption">No backlog issues.</Typography>
+                </CardContent>
+              </Card>
+            ) : (
+              backlog.map((issue) => (
+                <PlannerIssue
+                  key={issue.id}
+                  issue={issue}
+                  sprints={sprints}
+                  onMove={(sprintNumber) => void moveIssue(issue, sprintNumber)}
+                  moving={movingId === issue.id}
+                />
+              ))
+            )}
+          </div>
         </aside>
 
         <div className="min-w-0 space-y-6">
@@ -525,8 +584,10 @@ export function SprintPlanner() {
                 <SprintSection
                   sprint={sprint}
                   issues={getSprintIssues(issues, sprint.sprintNumber)}
+                  allIssues={issues}
                   allSprints={sprints}
                   current={sprint.sprintNumber === currentSprintNumber}
+                  past={past}
                   movingId={movingId}
                   onMove={(issue, sprintNumber) =>
                     void moveIssue(issue, sprintNumber)
