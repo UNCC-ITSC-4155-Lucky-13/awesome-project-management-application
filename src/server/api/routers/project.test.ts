@@ -6,6 +6,7 @@ import {
   projectMembers,
   projects,
   user,
+  views,
 } from "@/server/db/schema";
 import {
   createTestCaller,
@@ -49,6 +50,16 @@ describe("projectRouter", () => {
     expect(await db.query.projects.findFirst()).toEqual(stored);
     expect(await db.query.projectMembers.findMany()).toEqual([
       { projectId: project.id, userId: testSession.user.id, role: "owner" },
+    ]);
+    expect(
+      (
+        await db.query.views.findMany({
+          where: eq(views.projectId, project.id),
+        })
+      ).map(({ name, ownerUserId }) => ({ name, ownerUserId })),
+    ).toEqual([
+      { name: "Board", ownerUserId: null },
+      { name: "By person", ownerUserId: null },
     ]);
   });
 

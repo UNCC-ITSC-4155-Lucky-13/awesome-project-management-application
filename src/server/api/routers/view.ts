@@ -4,11 +4,7 @@ import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import type { db } from "@/server/db";
-import {
-  projectMembers,
-  views,
-  type ViewConfiguration,
-} from "@/server/db/schema";
+import { projectMembers, views } from "@/server/db/schema";
 
 type Database = typeof db;
 
@@ -89,83 +85,6 @@ export const viewConfigurationSchema = z.object({
   sort: viewSortSchema.nullable().optional(),
 });
 
-export const DEFAULT_BOARD_VIEW: {
-  name: string;
-  icon: ViewIcon;
-  configuration: ViewConfiguration;
-} = {
-  name: "Board",
-  icon: "layout-dashboard",
-  configuration: {
-    columns: ["backlog", "todo", "in_progress", "done"],
-    groupBy: "status",
-    rowGroup: null,
-    filters: {},
-    sort: null,
-  },
-};
-
-export const DEFAULT_PERSON_VIEW: {
-  name: string;
-  icon: ViewIcon;
-  configuration: ViewConfiguration;
-} = {
-  name: "By person",
-  icon: "users",
-  configuration: {
-    columns: ["backlog", "todo", "in_progress", "done"],
-    groupBy: "status",
-    rowGroup: "assignee",
-    filters: {},
-    sort: null,
-  },
-};
-
-/**
- * Ensures default workspace views (Board and By person) exist for a project.
- */
-export async function ensureDefaultViews(
-  database: Database,
-  projectId: string,
-): Promise<void> {
-  const existingViews = await database.query.views.findMany({
-    where: and(eq(views.projectId, projectId), isNull(views.ownerUserId)),
-  });
-
-  const hasBoard = existingViews.some(
-    (v) => v.name === DEFAULT_BOARD_VIEW.name,
-  );
-  const hasPerson = existingViews.some(
-    (v) => v.name === DEFAULT_PERSON_VIEW.name,
-  );
-
-  const toInsert: (typeof views.$inferInsert)[] = [];
-
-  if (!hasBoard) {
-    toInsert.push({
-      projectId,
-      ownerUserId: null,
-      name: DEFAULT_BOARD_VIEW.name,
-      icon: DEFAULT_BOARD_VIEW.icon,
-      configuration: DEFAULT_BOARD_VIEW.configuration,
-    });
-  }
-
-  if (!hasPerson) {
-    toInsert.push({
-      projectId,
-      ownerUserId: null,
-      name: DEFAULT_PERSON_VIEW.name,
-      icon: DEFAULT_PERSON_VIEW.icon,
-      configuration: DEFAULT_PERSON_VIEW.configuration,
-    });
-  }
-
-  if (toInsert.length > 0) {
-    await database.insert(views).values(toInsert);
-  }
-}
-
 async function requireMembership(
   database: Database,
   projectId: string,
@@ -193,8 +112,6 @@ export const viewRouter = createTRPCRouter({
     .input(z.object({ projectId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       await requireMembership(ctx.db, input.projectId, ctx.session.user.id);
-
-      await ensureDefaultViews(ctx.db, input.projectId);
 
       return ctx.db.query.views.findMany({
         where: and(

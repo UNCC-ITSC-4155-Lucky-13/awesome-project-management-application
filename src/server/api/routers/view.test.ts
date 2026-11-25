@@ -151,49 +151,13 @@ describe("viewRouter", () => {
     });
   });
 
-  describe("list & default views", () => {
-    it("provides the default status (Board) and by-person views as Workspace Views", async () => {
+  describe("list", () => {
+    it("does not create default views when listing a project", async () => {
       const caller = callerFor("member-user", "Member User").view;
-      const list = await caller.list({ projectId });
-
-      expect(list.length).toBeGreaterThanOrEqual(2);
-
-      const boardView = list.find((v) => v.name === "Board");
-      expect(boardView).toBeDefined();
-      expect(boardView?.ownerUserId).toBeNull();
-      expect(boardView?.icon).toBe("layout-dashboard");
-      expect(boardView?.configuration).toMatchObject({
-        groupBy: "status",
-      });
-
-      const personView = list.find((v) => v.name === "By person");
-      expect(personView).toBeDefined();
-      expect(personView?.ownerUserId).toBeNull();
-      expect(personView?.icon).toBe("users");
-      expect(personView?.configuration).toMatchObject({
-        rowGroup: "assignee",
-      });
-
-      // Calling list again when defaults already exist should succeed idempotently
-      const secondList = await caller.list({ projectId });
-      expect(secondList.length).toBe(list.length);
-    });
-
-    it("seeds missing default views if only one exists", async () => {
-      // Seed only the Board view
-      await db.insert(views).values({
-        projectId,
-        ownerUserId: null,
-        name: "Board",
-        icon: "layout-dashboard",
-        configuration: {},
-      });
-
-      const caller = callerFor("member-user", "Member User").view;
-      const list = await caller.list({ projectId });
-
-      expect(list.find((v) => v.name === "Board")).toBeDefined();
-      expect(list.find((v) => v.name === "By person")).toBeDefined();
+      await expect(caller.list({ projectId })).resolves.toEqual([]);
+      await expect(
+        db.query.views.findMany({ where: eq(views.projectId, projectId) }),
+      ).resolves.toEqual([]);
     });
 
     it("rejects non-members calling list", async () => {
@@ -366,15 +330,24 @@ describe("viewRouter", () => {
   describe("getById", () => {
     it("returns Workspace Views and caller's own My Views", async () => {
       const memberCaller = callerFor("member-user", "Member User").view;
-      const viewsList = await memberCaller.list({ projectId });
-      const boardView = viewsList.find((v) => v.name === "Board")!;
+      const [boardView] = await db
+        .insert(views)
+        .values({
+          projectId,
+          ownerUserId: null,
+          name: "Board",
+          icon: "layout-dashboard",
+          configuration: {},
+        })
+        .returning();
+      expect(boardView).toBeDefined();
 
       // Member can get workspace view
       const fetchedBoard = await memberCaller.getById({
-        id: boardView.id,
+        id: boardView!.id,
         projectId,
       });
-      expect(fetchedBoard.id).toBe(boardView.id);
+      expect(fetchedBoard.id).toBe(boardView!.id);
 
       // Member can get own personal view
       const personal = await memberCaller.create({
