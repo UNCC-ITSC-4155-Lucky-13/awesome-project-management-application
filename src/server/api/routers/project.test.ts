@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,6 +8,7 @@ import {
   user,
   views,
 } from "@/server/db/schema";
+import { ensureDefaultViews } from "@/server/lib/default-views";
 import {
   createTestCaller,
   db,
@@ -60,6 +61,30 @@ describe("projectRouter", () => {
     ).toEqual([
       { name: "Board", ownerUserId: null },
       { name: "By person", ownerUserId: null },
+    ]);
+  });
+
+  it("repairs only missing workspace views and is idempotent", async () => {
+    const project = await createTestCaller().project.create({
+      name: "Defaults",
+    });
+
+    await db
+      .delete(views)
+      .where(and(eq(views.projectId, project.id), eq(views.name, "Board")));
+
+    await ensureDefaultViews(db, project.id);
+    await ensureDefaultViews(db, project.id);
+
+    expect(
+      (
+        await db.query.views.findMany({
+          where: eq(views.projectId, project.id),
+        })
+      ).map(({ name, ownerUserId }) => ({ name, ownerUserId })),
+    ).toEqual([
+      { name: "By person", ownerUserId: null },
+      { name: "Board", ownerUserId: null },
     ]);
   });
 
